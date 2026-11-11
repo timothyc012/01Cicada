@@ -1,0 +1,9 @@
+# Mac dictation and automatic paste
+
+The user authorized cloning Cicada and adding the previously described work dictation flow. Add a Mac-only mode alongside interpreting: toggle a global shortcut, speak, toggle again, finalize original-language transcription and paste into the original field. Do not translate or speak dictation. Open idle by default, with an explicit setting to restore listening on launch. Keep upstream interpreting intact and use existing Recognition/RoomMic infrastructure without dependencies.
+
+Use Ctrl+Option+D by default with an editable shortcut and language in existing settings. Show preparing/listening/finishing state, preview text, stop/cancel, and completion/error in the menu panel. Recording must not compete with meeting microphone capture or interpreting. Bound a recording to two minutes and cancel stale asynchronous completions. Local Apple recognition works without a service key on supported Macs; existing cloud recognition policy applies to Intel/configured cloud services.
+
+Capture target app and focused element before recording; paste only if both still match. Never activate a different app or paste into a newly selected field. If Accessibility is unavailable or focus changed, copy the result and explain that it is ready to paste. Keep the dictated text on the clipboard after simulated Cmd+V so a slow target cannot paste unrelated restored content. Retain the last result with an explicit Copy action.
+
+Reuse current Chinese UI keys with English/Japanese/Korean translations. Test partial/final accumulation, stale cancellation and paste decisions; run existing tests, build the dev app and use a local file through the real recognizer plus a real editable target for integration verification. Microphone permission requires the user if the OS prompts. Windows implementation is explained, not modified in this task.

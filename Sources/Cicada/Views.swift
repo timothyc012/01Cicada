@@ -243,6 +243,10 @@ struct MenuPanelView: View {
 
             Divider()
 
+            DictationPanel(model: model, engine: model.dictation, settings: settings)
+
+            Divider()
+
             speakSection
             if let strip = systemMicStrip {
                 HStack(spacing: 10) {

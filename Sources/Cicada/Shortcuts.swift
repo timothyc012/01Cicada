@@ -12,6 +12,8 @@ struct Shortcut: Equatable {
     static let defaultTalk = rightOption
     static let defaultToggle = Shortcut(keyCode: kVK_ANSI_S, modifiers: controlKey | optionKey)
 
+    static let defaultDictation = Shortcut(keyCode: kVK_ANSI_D, modifiers: controlKey | optionKey)
+
     var isRightOption: Bool { self == .rightOption }
 
     var stored: String { "\(keyCode):\(modifiers)" }

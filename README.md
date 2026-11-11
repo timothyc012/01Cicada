@@ -78,6 +78,10 @@ After a meeting, you can generate notes retroactively, export to Markdown, Word,
   <img src="docs/records.png" width="640" alt="Meeting records window showing identified speakers and a line-by-line English and Chinese transcript">
 </p>
 
+### Dictation on Mac
+
+Press `Control+Option+D` in a text field, speak, then press it again to insert your words. Settings → Dictation changes the language and shortcut. Allow Accessibility for automatic paste; if you switch apps or fields, the text is copied instead. Recordings stop after two minutes, and the last result can be copied from the menu panel. Dictation uses original-language recognition without translation or TTS. The app opens idle by default; Settings → Dictation can enable listening to computer audio at launch. Dictation text remains on the clipboard after insertion. This addition is currently Mac-only.
+
 ## Privacy & Permissions
 
 **Apple silicon Macs**: Audio capture, language detection, speech recognition, and meeting recordings all stay on your computer. The only data that leaves your Mac is the recognized text (sent for translation and meeting notes) and the short voice clips you speak while holding the talk key with a Ling key configured (if a speech model downloads slowly and you click **Use Ling for Now**, or if you switch speech recognition to a self-hosted service in **Settings › AI Service**, meeting audio is also sent to that service). Without an API key, live subtitles, translation, meeting records, and interpreting all work for free. Live notes, one-step voice translation, and voice cloning require your own Ling (Ant Group's LLM service) API key; an hour of meetings costs roughly ¥0.15 to ¥1 RMB, and Ling provides ¥10 of free credit every month, enough for 10 to 50 hours.

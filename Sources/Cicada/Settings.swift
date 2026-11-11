@@ -87,6 +87,10 @@ final class AppSettings: ObservableObject {
         didSet { save() }
     }
 
+    @Published var dictationKey: Shortcut { didSet { save() } }
+    @Published var dictationLanguage: String { didSet { save() } }
+    @Published var listenOnLaunch: Bool { didSet { save() } }
+
     /// What shows while listening: "notes" (live notes window, default), "bar" (subtitle bar), "none".
     @Published var displayMode: String {
         didSet { save() }
@@ -260,6 +264,10 @@ final class AppSettings: ObservableObject {
         overlayHideAfter = defaults.object(forKey: "overlayHideAfter") as? Double ?? 4
         talkKey = Shortcut(stored: defaults.string(forKey: "talkKey")) ?? .defaultTalk
         toggleKey = Shortcut(stored: defaults.string(forKey: "toggleKey")) ?? .defaultToggle
+        listenOnLaunch = defaults.object(forKey: "listenOnLaunch") as? Bool ?? false
+        dictationKey = Shortcut(stored: defaults.string(forKey: "dictationKey")) ?? .defaultDictation
+        dictationLanguage = defaults.string(forKey: "dictationLanguage")
+            ?? speakLocale(forLanguage: Cicada.myLanguage(systemLanguages: Locale.preferredLanguages))
         aiModel = defaults.string(forKey: "aiModel") ?? "Ling-3.1-flash"
         aiProvider = defaults.string(forKey: "aiProvider") ?? "ling"
         aiModels = defaults.dictionary(forKey: "aiModels") as? [String: String] ?? [:]
@@ -317,6 +325,9 @@ final class AppSettings: ObservableObject {
         defaults.set(overlayHideAfter, forKey: "overlayHideAfter")
         defaults.set(talkKey.stored, forKey: "talkKey")
         defaults.set(toggleKey.stored, forKey: "toggleKey")
+        defaults.set(dictationKey.stored, forKey: "dictationKey")
+        defaults.set(dictationLanguage, forKey: "dictationLanguage")
+        defaults.set(listenOnLaunch, forKey: "listenOnLaunch")
         defaults.set(aiModel, forKey: "aiModel")
         defaults.set(aiProvider, forKey: "aiProvider")
         defaults.set(aiModels, forKey: "aiModels")

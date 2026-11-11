@@ -81,6 +81,7 @@ final class SpeakEngine {
     var onStatus: ((String) -> Void)?
     /// Why a press of the talk key went nowhere: shown while the key is held.
     var onNotice: ((String) -> Void)?
+    var canStart: () -> Bool = { true }
     /// Translator shared with the listening side.
     var translate: ((_ text: String, _ from: String, _ to: String, _ trace: TranslateTrace) async -> String?)?
     /// The press as a WAV → (what was said, translation); nil when Ming is unavailable or its reply is unusable.
@@ -286,6 +287,7 @@ final class SpeakEngine {
     // MARK: Push to talk
 
     func pressBegan() {
+        guard canStart() else { return }
         guard settings.speakEnabled || probe != nil else { return }
         guard phase == .idle || phase == .speaking else {
             debugLog("speak: press while \(phase) ignored")
@@ -352,6 +354,7 @@ final class SpeakEngine {
     /// Returns false when the engine isn't ready.
     @discardableResult
     func speakBuffers(_ buffers: [AVAudioPCMBuffer]) async -> Bool {
+        guard canStart() else { return false }
         guard phase == .idle || phase == .speaking, let format = analyzerFormat, let input = beginUtterance() else {
             debugLog("speakBuffers: not ready")
             return false

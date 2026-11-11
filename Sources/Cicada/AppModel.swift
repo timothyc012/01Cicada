@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AVFoundation
 import Carbon.HIToolbox
 import Combine
@@ -16,6 +17,10 @@ final class AppModel: ObservableObject {
     let talkCombo = HotKey(id: 1, shortcut: .defaultTalk)
     let talkRight = RightOptionKey()
     let toggleKey = HotKey(id: 2, shortcut: .defaultToggle)
+    let dictationKey = HotKey(id: 3, shortcut: .defaultDictation)
+    let dictation = DictationEngine()
+    @Published var dictating = false
+    @Published var dictationKeyTaken = false
     lazy var listen = ListenEngine(settings: settings)
     /// The one echo-cancelling mic unit, shared by the talk key and 电脑和会议室's room.
     let voiceMic = VoiceMic()
@@ -196,7 +201,7 @@ final class AppModel: ObservableObject {
 
     init() {
         // A meeting or speaking holds the update notification until it ends (see stop()).
-        updates.busy = { [weak self] in guard let self else { return false }; return self.running || self.speak.phase != .idle }
+        updates.busy = { [weak self] in guard let self else { return false }; return self.running || self.speak.phase != .idle || self.dictation.busy }
         // Words in the Mac's audio: speech, which the room mic is silenced for (music isn't, `EchoGate`).
         listen.onWords = { [gate = roomListen.echoGate] in gate.heardWords() }
         speak.micTaken = { [weak self] in
@@ -353,7 +358,9 @@ final class AppModel: ObservableObject {
         }
 
         let began: () -> Void = { [weak self] in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.speak.pressBegan() } }
+            DispatchQueue.main.async { MainActor.assumeIsolated {
+                guard let self, !self.dictation.busy else { return }; self.speak.pressBegan()
+            } }
         }
         let ended: () -> Void = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.speak.pressEnded() } }
@@ -377,6 +384,17 @@ final class AppModel: ObservableObject {
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.cycleDisplay() } }
         }
         applyToggleKey()
+        speak.canStart = { [weak self] in self?.dictation.busy == false }
+        speakTester.canStart = { [weak self] in self?.dictation.busy == false }
+        dictation.onChange = { [weak self] in
+            guard let self else { return }
+            self.dictating = self.dictation.busy
+            self.objectWillChange.send()
+        }
+        dictationKey.onDown = { [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.toggleDictation() } }
+        }
+        applyDictationKey()
         refreshOutputs()
         let watch = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -409,7 +427,7 @@ final class AppModel: ObservableObject {
 
     func pickLanguage(_ lang: Lang) { listen.pickLanguage(lang) }
     func retryModel() { listen.retryModel() }
-    func startCloud() { listen.startCloud(); refresh() }
+    func startCloud() { guard !dictation.busy else { return }; listen.startCloud(); refresh() }
     func stopCloud() { listen.stopCloud(); refresh() }
     func declineCloud() {
         debugLog("cloud: offer declined")
@@ -435,7 +453,7 @@ final class AppModel: ObservableObject {
         // Listening starts by itself at launch: never with the microphone open. 会议室 is chosen
         // for the meeting at hand, not kept for the next login.
         if settings.hearsRoom { settings.listenSource = "system" }
-        start()
+        if settings.listenOnLaunch { start() }
         if settings.speakEnabled { enableSpeaking(true) }
     }
 
@@ -665,6 +683,7 @@ final class AppModel: ObservableObject {
     /// `byUser`: started by a click or ⌘R, so the notes window shows at once as the sign that
     /// listening began. Starting by itself (launch, a meeting app's call) waits for the first words.
     func start(byUser: Bool = false) {
+        guard !dictation.busy else { return }
         guard !listen.isRunning else { return }
         let session = store.begin()
         diagnostics.begin()
@@ -919,6 +938,7 @@ final class AppModel: ObservableObject {
     }
 
     func setMic(_ on: Bool) {
+        if on && dictation.busy { return }
         let value = !on ? "system" : Recognition.legacy ? "room" : "both"
         // Asking for the room is asking to listen, even with the switch already on.
         if value == settings.listenSource {
@@ -1022,7 +1042,29 @@ final class AppModel: ObservableObject {
 
     // MARK: Shortcuts
 
-    enum ShortcutRole { case talk, toggle }
+    func toggleDictation(file: URL? = nil) {
+        if dictation.phase == .recording { dictation.stop(); return }
+        if dictation.busy { dictation.cancel(); return }
+        guard !running, speak.phase == .idle, !speakTester.busy else {
+            dictation.message = L("请先停止会议或同声传译")
+            openPanel?()
+            return
+        }
+        let device = file == nil ? systemMic.recordingDevice ?? AudioDevices.roomMic() : nil
+        dictation.start(locale: settings.dictationLanguage, device: device, file: file)
+    }
+
+    func applyDictationKey() {
+        dictationKey.unregister()
+        guard !shortcutsSuspended else { return }
+        dictationKeyTaken = !dictationKey.register(settings.dictationKey)
+    }
+
+    enum ShortcutRole { case talk, toggle, dictation }
+
+    func shortcut(for role: ShortcutRole) -> Shortcut {
+        switch role { case .talk: settings.talkKey; case .toggle: settings.toggleKey; case .dictation: settings.dictationKey }
+    }
 
     /// Arms the talk key for the current setting. Right ⌥ waits for "输入监控" and
     /// arms itself as soon as it's allowed (no relaunch).
@@ -1069,17 +1111,18 @@ final class AppModel: ObservableObject {
         shortcutsSuspended = on
         applyTalkKey()
         applyToggleKey()
+        applyDictationKey()
     }
 
     /// Validates and saves a new shortcut. Returns why it was refused, or nil.
     func setShortcut(_ s: Shortcut, for role: ShortcutRole) -> String? {
-        if role == .toggle && s.isRightOption { return L("右 ⌥ 只能用于“按住说话”") }
+        if role != .talk && s.isRightOption { return L("右 ⌥ 只能用于“按住说话”") }
         if let p = s.typingProblem { return p }
-        let other = role == .talk ? settings.toggleKey : settings.talkKey
-        if s == other { return L("与另一个快捷键冲突") }
+        let others: [ShortcutRole] = [.talk, .toggle, .dictation]
+        if others.contains(where: { $0 != role && shortcut(for: $0) == s }) { return L("与另一个快捷键冲突") }
         if s.isSystemShortcut { return L("\(s.display) 是系统快捷键，换一个吧") }
         // The one already in use is registered by us: probing it would always fail.
-        let current = role == .talk ? settings.talkKey : settings.toggleKey
+        let current = shortcut(for: role)
         if !s.isRightOption && s != current {
             // Probe: Carbon refuses a combo another app already registered.
             let probe = HotKey(id: 9, shortcut: s)
@@ -1093,9 +1136,12 @@ final class AppModel: ObservableObject {
             if s.isRightOption && settings.speakEnabled && !RightOptionKey.allowed { RightOptionKey.requestAccess() }
         case .toggle:
             settings.toggleKey = s
+        case .dictation:
+            settings.dictationKey = s
         }
         applyTalkKey()
         applyToggleKey()
+        applyDictationKey()
         objectWillChange.send()
         return nil
     }
@@ -1728,6 +1774,17 @@ final class AppModel: ObservableObject {
         let parts = cmd.split(separator: ":", maxSplits: 1).map(String.init)
         let arg = parts.count > 1 ? parts[1] : ""
         switch parts.first ?? "" {
+        case "dictate": toggleDictation()
+        case "dictateFile": toggleDictation(file: URL(fileURLWithPath: arg))
+        case "dictateStop": dictation.stop()
+        case "dictateCancel": dictation.cancel()
+        case "dictateLanguage":
+            if sourceLanguages.contains(where: { $0.locale == arg }) { settings.dictationLanguage = arg }
+            else { debugFail("Unsupported dictation language") }
+        case "dictateState":
+            DebugRun.reply?.data = ["phase": String(describing: dictation.phase), "text": dictation.text,
+                                    "lastText": dictation.lastText, "message": dictation.message,
+                                    "accessibility": AXIsProcessTrusted()] as [String: Any]
         case "ping":
             let snapshot = debugSnapshot(["build"])
             DebugRun.reply?.data = snapshot
@@ -2330,10 +2387,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         model.showPanel = { [weak self] in self?.togglePopover() }
         model.openPanel = { [weak self] in if self?.popover.isShown == false { self?.togglePopover() } }
         model.openOnboarding = { [weak self] in self?.showOnboarding() }
-        runningObserver = model.$running.combineLatest(model.updates.$update, model.$problem).sink { [weak self] live, update, problem in
+        runningObserver = model.$running.combineLatest(model.updates.$update, model.$problem, model.$dictating).sink { [weak self] live, update, problem, dictating in
             let badge: BrandImage.Badge = problem != nil ? .problem : update != nil ? .update : .none
-            self?.statusItem.button?.image = BrandImage.menuBar(live: live, badge: badge)
-            self?.statusItem.button?.toolTip = problem ?? update.map { L("有新版本 \($0.version)") }
+            self?.statusItem.button?.image = BrandImage.menuBar(live: live || dictating, badge: badge)
+            self?.statusItem.button?.toolTip = dictating ? L("正在听写，再按快捷键输入") : problem ?? update.map { L("有新版本 \($0.version)") }
             debugLog("menu bar: badge=\(badge) tooltip=\(problem ?? "-")")
             DockIcon.show(live: live)
         }
@@ -2401,6 +2458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        model.dictation.cancel()
         model.stop()
         // Other apps would be left on the virtual mic, hearing nothing.
         model.systemMic.release()

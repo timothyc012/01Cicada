@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case overlay, language, words, speak, records, ai, diagnostics
+    case overlay, language, words, speak, dictation, records, ai, diagnostics
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .language: L("语言")
         case .words: L("词表")
         case .speak: L("同声传译")
+        case .dictation: L("听写输入")
         case .records: L("通用")
         case .ai: L("AI 服务")
         case .diagnostics: L("诊断")
@@ -22,6 +23,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .language: "globe"
         case .words: "character.book.closed"
         case .speak: "mic"
+        case .dictation: "keyboard"
         case .records: "gearshape"
         case .ai: "key"
         case .diagnostics: "waveform.path.ecg"
@@ -171,8 +173,10 @@ struct ShortcutField: View {
     @State private var monitor: Any?
     @State private var rightDown = false
 
-    private var current: Shortcut { role == .talk ? model.settings.talkKey : model.settings.toggleKey }
-    private var standard: Shortcut { role == .talk ? .defaultTalk : .defaultToggle }
+    private var current: Shortcut { model.shortcut(for: role) }
+    private var standard: Shortcut {
+        switch role { case .talk: .defaultTalk; case .toggle: .defaultToggle; case .dictation: .defaultDictation }
+    }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
@@ -438,6 +442,7 @@ struct SettingsView: View {
             }
             switch model.settingsSection {
             case .speak: speak
+            case .dictation: DictationSettings(model: model, settings: settings)
             case .overlay: overlay
             case .language: LanguageSettings(model: model, settings: settings)
             case .words: WordListSettings(model: model, settings: settings, vocabulary: model.vocabulary, ling: model.ling)

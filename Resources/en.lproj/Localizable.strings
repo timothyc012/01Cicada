@@ -1414,3 +1414,53 @@
 "正在听外放…" = "Listening to the speaker…";
 "知了 · 正在听" = "Cicada · Listening";
 "没听到声音，请拔掉耳机或调大音量" = "No sound; unplug headphones or turn it up";
+
+"听写输入" = "Dictation";
+
+"按快捷键开始听写" = "Press the shortcut to dictate";
+
+"正在准备听写…" = "Preparing dictation…";
+
+"正在听写，再按快捷键输入" = "Dictating · press again to insert";
+
+"正在整理听写…" = "Finishing dictation…";
+
+"停止并输入" = "Stop and insert";
+
+"取消听写" = "Cancel dictation";
+
+"复制上次听写" = "Copy last dictation";
+
+"听写快捷键已被占用，请在设置中更换" = "Dictation shortcut is in use. Change it in Settings.";
+
+"在输入框按快捷键开始，再按一次输入；最长两分钟。" = "Press the shortcut in a text field to start, then again to insert. Up to two minutes.";
+
+"听写语言" = "Dictation language";
+
+"听写快捷键" = "Dictation shortcut";
+
+"自动粘贴" = "Automatic paste";
+
+"允许辅助功能后，听写会输入到原来的输入框。" = "Allow Accessibility to insert dictation into the original text field.";
+
+"允许辅助功能" = "Allow Accessibility";
+
+"切换应用或输入框后，只复制文字，不会自动输入。" = "If you switch apps or text fields, the text is copied for you to paste.";
+
+"当前语音识别使用云端服务，需要已配置的 AI 服务。" = "Recognition uses your configured cloud AI service.";
+
+"请允许麦克风访问" = "Allow microphone access.";
+
+"听写超时，请重试" = "Dictation timed out. Try again.";
+
+"没有听到语音" = "No speech heard.";
+
+"已输入" = "Inserted";
+
+"已复制，请粘贴到输入框" = "Copied. Paste into your text field.";
+
+"已取消听写" = "Dictation cancelled.";
+
+"请先停止会议或同声传译" = "Stop listening or interpreting before dictating.";
+
+"启动时监听电脑声音" = "Listen to computer audio at launch";

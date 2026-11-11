@@ -7,6 +7,14 @@
     "image": null,
     "items": [
       {
+        "kind": "new",
+        "platforms": [
+          "mac"
+        ],
+        "title": "在任何输入框听写，原文自动输入。",
+        "text": "按 Control+Option+D 开始，说完再按一次。可改语言和快捷键；切换输入框时只复制文字，不会输入到别处。"
+      },
+      {
         "kind": "fixed",
         "platforms": [
           "mac"

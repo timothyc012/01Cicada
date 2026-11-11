@@ -241,6 +241,8 @@ final class SpeakTester: ObservableObject {
     private var player: AVAudioPlayer?
     private var running: Task<Void, Never>?
 
+    var canStart: () -> Bool = { true }
+
     var busy: Bool { ![.idle, .done].contains(phase) }
 
     init(speak: SpeakEngine, ling: LingClient, settings: AppSettings) {
@@ -265,7 +267,8 @@ final class SpeakTester: ObservableObject {
     // MARK: Run
 
     func start(_ mode: Mode) {
-        guard !busy else { return }
+        guard !busy, canStart() else { return }
+        phase = .preparing
         self.mode = mode
         stopPlaying()
         result = nil
@@ -275,7 +278,7 @@ final class SpeakTester: ObservableObject {
 
     /// Voice mode: the on-screen button, same as holding the talk key.
     func beginTalking() {
-        guard phase == .ready else { return }
+        guard phase == .ready, canStart() else { return }
         phase = .talking
         speak.pressBegan()
     }
