@@ -1,6 +1,6 @@
 # Dictation hotkey diagnosis
 
-The user reported that Cmd+Ctrl+D failed and changing the combination also failed. The current user-selected setting is Ctrl+Option+D (`2:6144`); preserve it during diagnosis.
+The user reported that Cmd+Ctrl+D failed and changing the combination also failed. During initial diagnosis the setting was Ctrl+Option+D (`2:6144`). The user subsequently requested restoring Control+Command+D: restored `2:4352` while the app was stopped, relaunched, and verified both the native settings UI and `dictateState` show ⌃ ⌘ D with registered=true, handlerStatus=0, registrationStatus=0, and shortcutsSuspended=false.
 
 Added read-only developer diagnostics: Carbon handler/registration status, whether shortcuts are suspended, received dictation press count, and per-run audio buffer/frame/peak counters. No dictated content is added to logs. `dictateState` exposes these fields alongside its existing state; `shortcuts` logs the same metrics.
 
@@ -12,4 +12,4 @@ The local CLT install has mismatched public/private PackageDescription interface
 
 `scripts/test.sh --manifest-cache none -Xbuild-tools-swiftc -vfsoverlay -Xbuild-tools-swiftc /tmp/cicada-hotkey-repro/manifest-overlay.json -Xbuild-tools-swiftc -module-cache-path -Xbuild-tools-swiftc /tmp/cicada-hotkey-repro/manifest-cache`
 
-Pending: one physical press of the current Ctrl+Option+D combination. A 40-second observation saw no press events, but the user has not yet confirmed performing that test. Do not conclude a root cause or claim a fix until that observation is available. Cicada Accessibility approval is also still pending; do not grant it based on approval to update AWhisper.
+Pending: one physical press of the restored Control+Command+D combination. An earlier 40-second observation of Ctrl+Option+D saw no press events, but the user had not confirmed performing that test. Do not conclude a root cause or claim a fix until a physical press is observed. Cicada Accessibility approval is also still pending; do not grant it based on approval to update AWhisper.
