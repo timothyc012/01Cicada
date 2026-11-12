@@ -41,6 +41,8 @@ struct DictationTranscript {
     private var limit: Task<Void, Never>?
     private var destination: DictationPaste?
     private let queue = DispatchQueue(label: "com.wquguru.cicada.dictation.audio")
+    private var audioStats = DictationAudioStats()
+    var audioDiagnostics: [String: Any] { audioStats.snapshot() }
 
     private let recognize: @MainActor (String) async throws -> RecognitionStream
 
@@ -63,6 +65,8 @@ struct DictationTranscript {
         transcript = DictationTranscript(language: Locale(identifier: locale).languageCode ?? "en")
         text = ""
         message = ""
+        audioStats = DictationAudioStats()
+        debugLog("dictation: preparing locale=\(locale)")
         phase = .preparing
         onChange?()
         preparation = Task { [weak self] in
@@ -95,9 +99,12 @@ struct DictationTranscript {
                 self.source = microphone
                 let converter = PCMConverter()
                 let audioQueue = self.queue
+                let audioStats = self.audioStats
                 microphone.onAudio = { buffer in
                     audioQueue.async {
-                        if let converted = converter.convert(buffer, to: input.format) { input.append(converted) }
+                        let converted = converter.convert(buffer, to: input.format)
+                        audioStats.receive(buffer, submitted: converted?.frameLength ?? 0)
+                        if let converted { input.append(converted) }
                     }
                 }
                 if let fileSource = microphone as? DictationFileSource {
@@ -107,6 +114,7 @@ struct DictationTranscript {
                 }
                 self.phase = .recording
                 try microphone.start()
+                debugLog("dictation: recording")
                 self.limit = Task { [weak self] in
                     do { try await Task.sleep(for: .seconds(120)) } catch { return }
                     guard let self, self.run.accepts(token) else { return }; self.stop()
@@ -153,6 +161,7 @@ struct DictationTranscript {
                 self.message = pasted ? L("已输入") : L("已复制，请粘贴到输入框")
             }
             self.destination = nil
+            debugLog("dictation: finished chars=\(result.count) audio=\(self.audioDiagnostics)")
             self.onChange?()
         }
     }
@@ -176,6 +185,30 @@ struct DictationTranscript {
 
     static func problem(_ message: String) -> NSError {
         NSError(domain: "Dictation", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+}
+
+/// Per-run counters let diagnostics distinguish a missing key event from an empty microphone.
+private final class DictationAudioStats: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffers = 0
+    private var captured = 0
+    private var submitted = 0
+    private var peak: Float = 0
+
+    func receive(_ buffer: AVAudioPCMBuffer, submitted frames: AVAudioFrameCount) {
+        var level: Float = 0
+        if let samples = buffer.floatChannelData?[0] {
+            for i in 0..<Int(buffer.frameLength) { level = max(level, abs(samples[i])) }
+        }
+        lock.withLock {
+            buffers += 1; captured += Int(buffer.frameLength); submitted += Int(frames)
+            peak = max(peak, level)
+        }
+    }
+
+    func snapshot() -> [String: Any] {
+        lock.withLock { ["buffers": buffers, "capturedFrames": captured, "submittedFrames": submitted, "peak": peak] }
     }
 }
 

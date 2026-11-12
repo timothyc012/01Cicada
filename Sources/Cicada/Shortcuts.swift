@@ -133,6 +133,8 @@ final class HotKey {
     private(set) var shortcut: Shortcut
     private var ref: EventHotKeyRef?
     private var handler: EventHandlerRef?
+    private(set) var handlerStatus: OSStatus = noErr
+    private(set) var registrationStatus: OSStatus?
     private let id: UInt32
 
     init(id: UInt32, shortcut: Shortcut) {
@@ -143,7 +145,7 @@ final class HotKey {
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
         ]
         let me = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, user in
+        handlerStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, user in
             guard let event, let user else { return noErr }
             let hk = Unmanaged<HotKey>.fromOpaque(user).takeUnretainedValue()
             var hkID = EventHotKeyID()
@@ -153,6 +155,7 @@ final class HotKey {
             if GetEventKind(event) == UInt32(kEventHotKeyPressed) { hk.onDown?() } else { hk.onUp?() }
             return noErr
         }, 2, &types, me, &handler)
+        if handlerStatus != noErr { debugLog("hotkey handler \(id) not installed: \(handlerStatus)") }
     }
 
     deinit {
@@ -170,6 +173,7 @@ final class HotKey {
         let hkID = EventHotKeyID(signature: OSType(0x4C535542), id: id) // 'LSUB'
         let status = RegisterEventHotKey(UInt32(self.shortcut.keyCode), UInt32(self.shortcut.modifiers), hkID,
                                          GetApplicationEventTarget(), 0, &ref)
+        registrationStatus = status
         if status != noErr {
             debugLog("hotkey \(self.shortcut.display) not registered: \(status)")
             ref = nil

@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     let dictation = DictationEngine()
     @Published var dictating = false
     @Published var dictationKeyTaken = false
+    private(set) var dictationShortcutPresses = 0
     lazy var listen = ListenEngine(settings: settings)
     /// The one echo-cancelling mic unit, shared by the talk key and 电脑和会议室's room.
     let voiceMic = VoiceMic()
@@ -425,7 +426,12 @@ final class AppModel: ObservableObject {
             self.objectWillChange.send()
         }
         dictationKey.onDown = { [weak self] in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.toggleDictation() } }
+            DispatchQueue.main.async { MainActor.assumeIsolated {
+                guard let self else { return }
+                self.dictationShortcutPresses += 1
+                debugLog("dictation hotkey: press \(self.dictationShortcutPresses) phase=\(self.dictation.phase)")
+                self.toggleDictation()
+            } }
         }
         applyDictationKey()
         refreshOutputs()
@@ -1092,6 +1098,14 @@ final class AppModel: ObservableObject {
         dictationKey.unregister()
         guard !shortcutsSuspended else { return }
         dictationKeyTaken = !dictationKey.register(settings.dictationKey)
+    }
+
+    func dictationDiagnostics() -> [String: Any] {
+        ["shortcut": settings.dictationKey.display, "registered": dictationKey.isRegistered,
+         "handlerStatus": Int(dictationKey.handlerStatus),
+         "registrationStatus": dictationKey.registrationStatus.map { Int($0) } ?? -1,
+         "shortcutsSuspended": shortcutsSuspended, "shortcutPresses": dictationShortcutPresses,
+         "audio": dictation.audioDiagnostics]
     }
 
     enum ShortcutRole { case talk, toggle, dictation }
@@ -1832,7 +1846,7 @@ final class AppModel: ObservableObject {
         case "dictateState":
             DebugRun.reply?.data = ["phase": String(describing: dictation.phase), "text": dictation.text,
                                     "lastText": dictation.lastText, "message": dictation.message,
-                                    "accessibility": AXIsProcessTrusted()] as [String: Any]
+                                    "accessibility": AXIsProcessTrusted()].merging(dictationDiagnostics()) { a, _ in a }
         case "ping":
             let snapshot = debugSnapshot(["build"])
             DebugRun.reply?.data = snapshot
@@ -2066,6 +2080,7 @@ final class AppModel: ObservableObject {
             debugLog("\(parts[0]) \(arg): \(refusal ?? "ok")")
         case "shortcuts":
             debugLog("shortcuts talk=\(settings.talkKey.display) armed=\(talkRight.isRunning || talkCombo.isRegistered) needsPermission=\(talkNeedsPermission) inputMonitoring=\(RightOptionKey.allowed) toggle=\(settings.toggleKey.display) taken=\(toggleKeyTaken)")
+            debugLog("dictation shortcut: \(dictationDiagnostics())")
         case "aiKeyFile":
             // Dev testing: the key comes from a file so it never passes through the log.
             if let k = try? String(contentsOfFile: arg, encoding: .utf8) { Task { await ling.setKey(k) } }
