@@ -44,3 +44,9 @@
 - Initial staged bundle reused old localized resources; live preview caught the new Chinese fallback text. Corrected by copying current Localizable.strings for en/ja/ko/zh-Hans plus zh-Hant fallback, preserving the existing dev InfoPlist strings; resigned/relaunched. All installed localization files now match source.
 - Final installed no-audio preview: title `듣는 중`, hint `⌃ ⌘ D를 다시 누르면 완료`,368×66,NSGlassEffectView.clear, visible=true, key/main/canBecomeKey/Main=false, labelsFit=true. Focus diagnostics before/after are identical. Preview then switched off; dictation phase stayed idle and Accessibility stayed true. Shortcut registered with status0; user shortcut/settings/paste safeguards unchanged.
 - Both meeting capture and speaking were idle before replacement. No real microphone input, clipboard delivery or physical global-hotkey test was performed during this update. macOS14 material fallback compiled, but runtime testing used macOS26.
+
+## Transparency refinement (2026-11-12)
+
+- Native backdrop alpha reduced to0.65, with the content rendered as a separate full-opacity sibling. Reduced gloss gradient and edge highlights; accessibility opaque surface remains alpha1.
+- All369 tests passed; installed signed app preserves existing localization resources and fixed development designated requirement. Previous bundle kept at `build/Cicada-before-clearer-glass.app`.
+- Installed no-audio preview confirmed backdropOpacity0.65/contentOpacity1, Korean labels, labelsFit=true, key/main=false and identical before/after focus diagnostics. Preview switched off afterward; no actual recording or paste was triggered.

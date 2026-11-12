@@ -92,7 +92,7 @@ Click **Share…** to generate a link to the notes (optionally including the ful
 
 Press `Control+Option+D` in a text field, speak, then press it again to insert your words. Settings → Dictation changes the language and shortcut. Allow Accessibility for automatic paste; if you switch apps or fields, the text is copied instead. Recordings stop after two minutes, and the last result can be copied from the menu panel. Dictation uses original-language recognition without translation or TTS. The app opens idle by default; Settings → Dictation can enable listening to computer audio at launch. Dictation text remains on the clipboard after insertion. This addition is currently Mac-only.
 
-A glass status panel at the top of the screen shows preparation, real microphone levels, elapsed time, transcription and delivery without taking focus. Copied-only notices explain why and show ⌘V; missing audio and errors remain visible longer.
+A glass status panel at the top of the screen shows preparation, real microphone levels, elapsed time, transcription and delivery without taking focus. Copied-only notices explain why and show ⌘V; missing audio and errors remain visible longer. The lighter translucent background keeps text and audio levels fully opaque.
 
 Press and release once to start, then press and release again to finish; holding the shortcut does not repeatedly start and stop recording.
 

@@ -142,7 +142,8 @@ private struct DictationHUDCopy {
                 "nonactivating": panel.styleMask.contains(.nonactivatingPanel),
                 "allSpaces": panel.collectionBehavior.contains(.canJoinAllSpaces),
                 "fullScreenAuxiliary": panel.collectionBehavior.contains(.fullScreenAuxiliary),
-                "material": surface?.materialName ?? "", "title": surface?.title.stringValue ?? "",
+                "material": surface?.materialName ?? "",
+                "backdropOpacity": surface?.backdropOpacity ?? 1, "contentOpacity": surface?.contentOpacity ?? 1, "title": surface?.title.stringValue ?? "",
                 "detail": surface?.detail.stringValue ?? "", "width": panel.frame.width, "height": panel.frame.height,
                 "status": String(describing: state.status), "clockRunning": clock != nil,
                 "labelsFit": surface?.labelsFit ?? false,
@@ -201,6 +202,8 @@ private final class DictationHUDPanel: NSPanel {
     private let content = DictationHUDHighlight()
     private var backdrop: NSView?
     private(set) var materialName = ""
+    var backdropOpacity: CGFloat { backdrop?.alphaValue ?? 1 }
+    var contentOpacity: CGFloat { content.alphaValue }
     private var reducedTransparency: Bool?
     private var highContrast: Bool?
 
@@ -233,7 +236,7 @@ private final class DictationHUDPanel: NSPanel {
             materialName = "opaqueAccessibility"
         } else if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
-            glass.style = .clear; glass.cornerRadius = 22; glass.contentView = content
+            glass.style = .clear; glass.cornerRadius = 22
             background = glass; materialName = "NSGlassEffectView.clear"
         } else {
             let effect = NSVisualEffectView()
@@ -241,8 +244,9 @@ private final class DictationHUDPanel: NSPanel {
             effect.wantsLayer = true; effect.layer?.cornerRadius = 22; effect.layer?.masksToBounds = true
             background = effect; materialName = "NSVisualEffectView.behindWindow"
         }
-        backdrop = background; addSubview(background)
-        if content.superview == nil { background.addSubview(content) }
+        // Keep labels above the backdrop so transparency never fades the text.
+        background.alphaValue = reduce || contrast ? 1 : 0.65
+        backdrop = background; addSubview(background); addSubview(content)
     }
     func preferredWidth(_ copy: DictationHUDCopy) -> CGFloat {
         let titleWidth = (copy.title as NSString).size(withAttributes: [.font: title.font!]).width
@@ -290,12 +294,12 @@ private final class DictationHUDHighlight: NSView {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 22, yRadius: 22)
         NSGraphicsContext.saveGraphicsState(); shape.addClip()
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        NSGradient(starting: NSColor.white.withAlphaComponent(dark ? 0.10 : 0.30),
-                   ending: NSColor.white.withAlphaComponent(dark ? 0.01 : 0.04))?.draw(in: bounds, angle: -90)
-        NSColor.white.withAlphaComponent(dark ? 0.24 : 0.65).setStroke(); shape.lineWidth = 1; shape.stroke()
+        NSGradient(starting: NSColor.white.withAlphaComponent(dark ? 0.05 : 0.12),
+                   ending: NSColor.white.withAlphaComponent(dark ? 0.005 : 0.015))?.draw(in: bounds, angle: -90)
+        NSColor.white.withAlphaComponent(dark ? 0.18 : 0.40).setStroke(); shape.lineWidth = 1; shape.stroke()
         let shine = NSBezierPath(); shine.move(to: NSPoint(x: bounds.width * 0.18, y: bounds.height - 1))
         shine.line(to: NSPoint(x: bounds.width * 0.82, y: bounds.height - 1))
-        NSColor.white.withAlphaComponent(dark ? 0.28 : 0.85).setStroke(); shine.stroke()
+        NSColor.white.withAlphaComponent(dark ? 0.22 : 0.55).setStroke(); shine.stroke()
         NSGraphicsContext.restoreGraphicsState()
     }
 }

@@ -7,6 +7,8 @@ every platform (one with nothing new says No changes); earlier ones shipped only
 
 ## Unreleased
 
+Mac dictation uses a more transparent backdrop while keeping labels and audio levels opaque.
+
 Mac dictation now shows a glass status panel with real audio levels, elapsed time and delivery results while keeping the input field focused.
 
 ## 1.9.0 — 2026-11-12
