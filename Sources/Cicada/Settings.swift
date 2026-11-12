@@ -35,6 +35,11 @@ final class AppSettings: ObservableObject {
     @Published var speakConfirmed: Bool {
         didSet { save() }
     }
+    /// 不用按键: interpret whenever I speak, no key held (`HandsFreeDetector`). Mac only: the ports
+    /// have no echo cancellation to hear me over the meeting.
+    @Published var speakHandsFree: Bool {
+        didSet { save() }
+    }
     /// Locale of the language I speak.
     @Published var speakFrom: String {
         didSet { save() }
@@ -60,6 +65,14 @@ final class AppSettings: ObservableObject {
         didSet { save() }
     }
     @Published var recordAudio: Bool {
+        didSet { save() }
+    }
+    /// 存到文件夹: settled meetings are also written as Markdown into `exportFolder` (a path; empty
+    /// until one is chosen). Not a secret: it may sit in UserDefaults.
+    @Published var exportOn: Bool {
+        didSet { save() }
+    }
+    @Published var exportFolder: String {
         didSet { save() }
     }
     /// Imported files: the language they are in ("auto" or a locale), and whether notes are written
@@ -140,6 +153,15 @@ final class AppSettings: ObservableObject {
     @Published var aiCustomRecognize: Bool {
         didSet { save() }
     }
+    /// The custom service's notes: 另一个服务 (its own address, empty: the same one, and its own key
+    /// in the `custom-notes` key file). Off keeps the address, so switching back and forth loses
+    /// nothing. The notes model is `aiModels["custom.notes"]` (empty: the translation model).
+    @Published var aiCustomNotesOwn: Bool {
+        didSet { save() }
+    }
+    @Published var aiCustomNotesBase: String {
+        didSet { save() }
+    }
     /// 语音和文字只发给你的服务: with the custom service, Google Translate is never asked (partial
     /// lines show the original). Kept when another service is picked, but only acts on the custom one.
     @Published var aiCustomOnly: Bool {
@@ -162,9 +184,16 @@ final class AppSettings: ObservableObject {
             let hear = aiCustomHearModel.trimmingCharacters(in: .whitespaces)
             let hearBase = aiCustomHearBase.isEmpty ? base : AIProvider.customBase(aiCustomHearBase)
             let recognizes = aiCustomRecognize && !hear.isEmpty
-            return AIConfig(provider: p, base: base, textModel: aiModels["custom"] ?? "", voiceModel: voice.isEmpty ? nil : voice,
+            let textModel = aiModels["custom"] ?? ""
+            let notesModel = (aiModels["custom.notes"] ?? "").trimmingCharacters(in: .whitespaces)
+            let notesAddress = aiCustomNotesOwn ? aiCustomNotesBase.trimmingCharacters(in: .whitespaces) : ""
+            let notesBase = notesAddress.isEmpty ? nil : AIProvider.customBase(notesAddress)
+            return AIConfig(provider: p, base: base, textModel: textModel, voiceModel: voice.isEmpty ? nil : voice,
                             voiceBase: voiceBase, customVoice: name.isEmpty ? nil : name,
-                            hearModel: recognizes ? hear : nil, hearBase: recognizes ? hearBase : nil)
+                            hearModel: recognizes ? hear : nil, hearBase: recognizes ? hearBase : nil,
+                            notesModel: notesModel.isEmpty || notesModel == textModel ? nil : notesModel,
+                            notesBase: notesBase == base ? nil : notesBase, notesOwnService: aiCustomNotesOwn,
+                            notesBadAddress: !notesAddress.isEmpty && notesBase == nil)
         default:
             return AIConfig(provider: p, base: p.base, textModel: aiModels[p.id.rawValue] ?? p.textModels.first?.id ?? "",
                             voiceModel: p.hasVoices ? aiVoiceModels[p.id.rawValue] ?? p.voiceModels.first?.id : nil, voiceBase: p.base)
@@ -252,12 +281,15 @@ final class AppSettings: ObservableObject {
         speakConfirmed = defaults.object(forKey: "speakConfirmed") as? Bool ?? defaults.bool(forKey: "speakEnabled")
         speakFrom = defaults.string(forKey: "speakFrom")
             ?? speakLocale(forLanguage: Cicada.myLanguage(systemLanguages: Locale.preferredLanguages))
+        speakHandsFree = defaults.bool(forKey: "speakHandsFree")
         speakTo = defaults.string(forKey: "speakTo") ?? "room"
         speakOutput = defaults.string(forKey: "speakOutput") ?? ""
         autoSystemMic = defaults.object(forKey: "autoSystemMic") as? Bool ?? true
         speakMic = defaults.string(forKey: "speakMic") ?? ""
         savedSystemInput = defaults.string(forKey: "savedSystemInput") ?? ""
         recordAudio = defaults.object(forKey: "recordAudio") as? Bool ?? true
+        exportOn = defaults.bool(forKey: "exportOn")
+        exportFolder = defaults.string(forKey: "exportFolder") ?? ""
         importLanguage = defaults.string(forKey: "importLanguage") ?? "auto"
         importNotes = defaults.object(forKey: "importNotes") as? Bool ?? true
         overlayAuto = defaults.object(forKey: "overlayAuto") as? Bool ?? true
@@ -279,6 +311,8 @@ final class AppSettings: ObservableObject {
         aiCustomHearBase = defaults.string(forKey: "aiCustomHearBase") ?? ""
         aiCustomRecognize = defaults.bool(forKey: "aiCustomRecognize")
         aiCustomOnly = defaults.bool(forKey: "aiCustomOnly")
+        aiCustomNotesOwn = defaults.bool(forKey: "aiCustomNotesOwn")
+        aiCustomNotesBase = defaults.string(forKey: "aiCustomNotesBase") ?? ""
         displayMode = defaults.string(forKey: "displayMode") ?? "notes"
         speakVoices = defaults.dictionary(forKey: "speakVoices") as? [String: String] ?? [:]
         endWithApp = defaults.object(forKey: "endWithApp") as? Bool ?? true
@@ -313,12 +347,15 @@ final class AppSettings: ObservableObject {
         defaults.set(speakEnabled, forKey: "speakEnabled")
         defaults.set(speakConfirmed, forKey: "speakConfirmed")
         defaults.set(speakFrom, forKey: "speakFrom")
+        defaults.set(speakHandsFree, forKey: "speakHandsFree")
         defaults.set(speakTo, forKey: "speakTo")
         defaults.set(speakOutput, forKey: "speakOutput")
         defaults.set(autoSystemMic, forKey: "autoSystemMic")
         defaults.set(speakMic, forKey: "speakMic")
         defaults.set(savedSystemInput, forKey: "savedSystemInput")
         defaults.set(recordAudio, forKey: "recordAudio")
+        defaults.set(exportOn, forKey: "exportOn")
+        defaults.set(exportFolder, forKey: "exportFolder")
         defaults.set(importLanguage, forKey: "importLanguage")
         defaults.set(importNotes, forKey: "importNotes")
         defaults.set(overlayAuto, forKey: "overlayAuto")
@@ -339,6 +376,8 @@ final class AppSettings: ObservableObject {
         defaults.set(aiCustomHearBase, forKey: "aiCustomHearBase")
         defaults.set(aiCustomRecognize, forKey: "aiCustomRecognize")
         defaults.set(aiCustomOnly, forKey: "aiCustomOnly")
+        defaults.set(aiCustomNotesOwn, forKey: "aiCustomNotesOwn")
+        defaults.set(aiCustomNotesBase, forKey: "aiCustomNotesBase")
         defaults.set(displayMode, forKey: "displayMode")
         defaults.set(speakVoices, forKey: "speakVoices")
         defaults.set(endWithApp, forKey: "endWithApp")

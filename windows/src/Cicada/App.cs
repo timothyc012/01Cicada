@@ -61,6 +61,8 @@ sealed class Controller
     public readonly UpdateChecker Updates;
     public readonly Vocabulary Vocabulary;
     public readonly LiveFixes Fixes;
+    /// 存到文件夹 (设置 › 隐私与启动): settled meetings written as Markdown into a folder.
+    public readonly FolderExporter FolderExport;
     /// 分享…: the share service, its device key and the links made (sealed files, never the record).
     public readonly ShareClient Sharing = new(new DpapiProtector(), "windows", Version);
     /// Dev (`silentlisten`): the language `heard` lines are in.
@@ -151,6 +153,18 @@ sealed class Controller
         Notes.Changed += Changed;
         Store.Changed += _ => Changed();
         Store.Words += id => Dispatch.BeginInvoke(() => HeardWords(id));
+        // 存到文件夹: written once a record is settled, rewritten when it changes. Its state is the
+        // dispatcher's, as the Mac's is the main actor's.
+        FolderExport = new FolderExporter(Store, Settings)
+        {
+            Post = a => Dispatch.BeginInvoke(a),
+            LiveId = () => Listen.Listening ? Listen.SessionId : null,
+            Settling = Notes.Settling,
+            NotifyDenied = NotifyFolderDenied,
+        };
+        FolderExport.Changed += () => { Changed(); Dispatch.BeginInvoke(() => settingsWindow?.ExportChanged()); };
+        Store.Saved += id => Dispatch.BeginInvoke(() => FolderExport.Saved(id));
+        Notes.FinalDone += id => Dispatch.BeginInvoke(() => FolderExport.Settled(id));
         Updates = new UpdateChecker(Settings.UpdateLastChecked, at => Dispatch.BeginInvoke(() => { Settings.UpdateLastChecked = at; Settings.Save(); })) { Current = Version };
         Updates.Changed += UpdatesChanged;
     }
@@ -178,6 +192,10 @@ sealed class Controller
         Log.Debug($"audio: speakers {Endpoints.Default(Endpoints.Flow.Render)?.Name ?? "none"}, mic {Endpoints.Microphone()?.Name ?? "none"}, cable {(Endpoints.Cable() is null ? "absent" : "present")}");
         DebugServer.Start(this);
         WatchNetwork();
+        // 存到文件夹: what is still waiting, now and whenever Cicada comes forward (a folder fixed
+        // in Windows 安全中心 meanwhile).
+        FolderExport.Retry();
+        application.Activated += (_, _) => FolderExport.Retry();
         // A dev build isn't what a release replaces: it checks only when pointed at a test feed.
         UpdateChecker.CleanDownloads();
         if (!Paths.Dev || Environment.GetEnvironmentVariable("CICADA_UPDATE_FEED") is { Length: > 0 }) { checksUpdates = true; Updates.Start(); }
@@ -385,6 +403,21 @@ sealed class Controller
         menu.IsOpen = true;
     }
 
+    /// 存到文件夹 couldn't write after a meeting (not inside a folder controlled folder access
+    /// protects: Windows says that itself). Once until a write works again.
+    void NotifyFolderDenied()
+    {
+        if (FolderExport.Folder is not { } folder) return;
+        Toast(L("纪要没存到文件夹"), LF("知了没有权限写入 %@。点按去设置", FolderExportUi.ShortPath(folder)), ShowFolderSettings);
+    }
+
+    /// 设置 › 隐私与启动, where 会后存一份 says what is wrong.
+    public void ShowFolderSettings()
+    {
+        ShowSettings();
+        SettingsPage("privacy");
+    }
+
     /// A Windows notification from the tray icon; a click on it runs `clicked`.
     public void Toast(string title, string body, Action? clicked = null)
     {
@@ -552,8 +585,8 @@ sealed class Controller
             }
             if (f?.Why == AICheck.Reason.Unreachable)
             {
-                string Body(AICheck h) => (h.Message(Ling.ServiceName, Ling.ServiceHost, Ling.Config.TextModel, Ling.HearName) ?? "")
-                    + (h.ProxyLine(Ling.ServiceName, Ling.ServiceHost) is { } proxy ? "\n" + proxy : "");
+                string Body(AICheck h) => (h.Message(Ling.ServiceLabel, Ling.ServiceHost, Ling.Config.TextModel, Ling.HearName) ?? "")
+                    + (h.ProxyLine(Ling.ServiceLabel, Ling.ServiceHost) is { } proxy ? "\n" + proxy : "");
                 await Task.Yield();
                 // 重新检查并开始: the check already under way (or one that finished reachable while the
                 // dialog was up), else a new one; reachable closes the dialog.
@@ -642,6 +675,7 @@ sealed class Controller
         await StopRoomSide();
         roomSources.Clear();
         await Listen.Stop(endedAt);
+        if (id is not null) FolderExport.Ended(id);
         Changed();
         NotifyUpdate(); // held while the meeting was on
         if (id is not null) _ = TellWhenNotesReady(id);
@@ -1054,6 +1088,11 @@ sealed class Controller
     {
         var p = Settings.AiProvider;
         if (kind == "text" && p == "ling") Settings.Model = model.Length > 0 ? model : LingClient.DefaultModel;
+        // A custom service's notes model: "" is the translation model's.
+        else if (kind == "notes")
+        {
+            if (model.Length > 0) Settings.AiModels["custom.notes"] = model; else Settings.AiModels.Remove("custom.notes");
+        }
         else
         {
             var table = kind switch { "text" => Settings.AiModels, "hear" => Settings.AiHearModels, "voice" => Settings.AiVoiceModels, _ => null };
@@ -1106,7 +1145,7 @@ sealed class Controller
     {
         var h = Ling.Health;
         if (!Ling.HasKey || !h.NeedsUser) return null;
-        var name = Ling.ServiceName;
+        var name = Ling.ServiceLabel;
         if (h.Failure is not { } f) return h.BalanceLine(name) is { } low ? (low, L("用完后就听不了对方")) : null;
         var stopped = L("听对方暂时用不了");
         return f.Why switch
@@ -1175,10 +1214,11 @@ sealed class Controller
         return new JsonObject
         {
             ["provider"] = c.Provider.Id, ["base"] = c.Base, ["hearBase"] = c.HearBase, ["text"] = c.TextModel, ["hear"] = c.HearModel, ["voice"] = c.VoiceModel,
+            ["notesBase"] = c.NotesApart ? c.ForNotes.Base : null, ["notesModel"] = c.NotesApart ? c.ForNotes.TextModel : null, ["notesOwnKey"] = Ling.NotesHasOwnKey,
             ["state"] = Ling.KeyState.ToString(), ["hears"] = Ling.Hears, ["seconds"] = Ling.Seconds is { } s ? Math.Round(s, 1) : null,
             ["check"] = Ling.Health.Summary,
-            ["problem"] = Ling.Health.Message(Ling.ServiceName, Ling.ServiceHost, Ling.Config.TextModel, Ling.HearName),
-            ["proxy"] = Ling.Health.ProxyLine(Ling.ServiceName, Ling.ServiceHost),
+            ["problem"] = Ling.Health.Message(Ling.ServiceLabel, Ling.ServiceHost, Ling.Config.TextModel, Ling.HearName),
+            ["proxy"] = Ling.Health.ProxyLine(Ling.ServiceLabel, Ling.ServiceHost),
             ["tray"] = AIProblem()?.Title,
             ["dot"] = Problem is not null ? "problem" : Listen.Listening ? "live" : Updates.Available is not null ? "update" : null,
             ["blocking"] = Problem,
@@ -1294,6 +1334,21 @@ sealed class Controller
     }
 
     /// For the debug pipe: what a test needs to see (never meeting text).
+    /// 存到文件夹 for the debug pipe (paths and file names, never meeting text).
+    public JsonObject ExportState()
+    {
+        var ex = FolderExport;
+        return new JsonObject
+        {
+            ["on"] = ex.On, ["folder"] = ex.Folder, ["short"] = ex.Folder is { } f ? FolderExportUi.ShortPath(f) : null,
+            ["checking"] = ex.Checking, ["problem"] = ex.Trouble?.Kind.ToString(), ["message"] = ex.Trouble?.Message,
+            ["protected"] = ex.Folder is { } pf && FolderExportFormat.Protected(pf), ["vault"] = ex.Folder is { } vf ? FolderExportFormat.Vault(vf) : null,
+            ["files"] = new JsonObject(ex.State.Files.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value))),
+            ["pending"] = new JsonArray(ex.State.Pending.Select(id => (JsonNode?)id).ToArray()),
+            ["unwritten"] = ex.Unwritten.Count, ["lastFile"] = ex.State.LastFile, ["lastAt"] = ex.State.LastAt?.ToString("o"),
+        };
+    }
+
     public JsonObject State() => new()
     {
         ["listening"] = Listen.Listening,
@@ -1334,6 +1389,7 @@ sealed class Controller
         ["roomMusic"] = Listen.Echo?.Gate.PlayingMusic,
         ["room"] = Listen.Room,
         ["recordAudio"] = Settings.RecordAudio,
+        ["export"] = ExportState(),
         ["hasAudio"] = Listen.SessionId is { } aid && Store.Get(aid) is { } a ? a.HasAudio : null,
         ["player"] = mainWindow?.PlayerState(),
     };
@@ -1347,7 +1403,7 @@ sealed class Controller
 ///   updatefeed <url or file> | checkupdate
 ///   calls <program=name,…>|none|real | realcalls | endtimes <silence> <countdown> <grace>|off | endkeep
 ///   provider ling|openrouter|zenmux|custom | ai-model hear|text|voice <id> (设置 › AI 服务; no id: the recommended)
-///   open <id> [transcript] | play <seconds>|toggle|speed | recordaudio on|off (保存会议录音 and 回放)
+///   open <id> [transcript] | play <seconds>|toggle|speed|follow|row <i> | recordaudio on|off (保存会议录音 and 回放)
 ///   aacencode <wav>|<out.aac> | aacrewrap <in.aac>|<out.m4a>[|<seconds>]
 ///   ai-check | ai-check-sim <reason|lowBalance|off> (unreachable, invalidKey, noCredit, noModel, deaf, busy…)
 ///   ai-custom-only on|off (语音和文字只发给你的服务; acts with the custom service only)
@@ -1442,6 +1498,15 @@ static class DebugServer
                 _ = app.Ling.Check();
                 break;
             case "ai-custom-only": app.Settings.AiCustomOnly = arg == "on"; app.Settings.Save(); app.AIChanged(); break;
+            // 纪要 on a custom service: "ai-notes same|own [address]" (the notes model: ai-model notes <id>).
+            case "ai-notes":
+            {
+                var p = arg.Split(' ', 2);
+                app.Settings.AiCustomNotesOwn = p[0] == "own";
+                if (p.Length > 1) app.Settings.AiCustomNotesBase = p[1].Trim();
+                app.Settings.Save(); app.AIChanged();
+                break;
+            }
             case "ai-model":
             {
                 var kv = arg.Split(' ', 2);
@@ -1468,9 +1533,29 @@ static class DebugServer
             // talkmic <name>: the talk key reads this input (with fakemic the WAV is still what is sent).
             case "talkmic": app.SetTalkMic(arg is "" or "off" ? null : arg); break;
             case "record": _ = app.RecordCable(arg); break;
-            // 回放: "open <id> [transcript]", "play <seconds>|toggle|speed", "recordaudio on|off".
+            // 回放: "open <id> [transcript]", "play <seconds>|toggle|speed|follow|row <i>" (follow: 回到正在播放; row: a line
+            // clicked), "recordaudio on|off".
+            case "rename": { var p = arg.Split(' ', 2); app.Store.Rename(p[0], p.Length > 1 ? p[1] : ""); break; }  // rename <id> <title> ("" back to automatic)
             case "open": { var p = arg.Split(' '); app.OpenRecord(p[0], p.Length > 1 ? p[1] : "notes"); break; }
             case "play": app.Play(arg); break;
+            // 存到文件夹: export [state] | on | off | folder <path> | choose | all | retry
+            case "export":
+            {
+                var p = arg.Split(' ', 2);
+                switch (p[0])
+                {
+                    case "on": if (app.FolderExport.Folder is { } f) app.FolderExport.Choose(f); else app.FolderExport.Choose(FolderExportFormat.DefaultFolder()); break;
+                    case "off": app.FolderExport.TurnOff(); break;
+                    case "folder" when p.Length > 1: app.FolderExport.Choose(p[1].Trim().Trim('"')); break;
+                    case "choose": // modal: shown after the reply, or the pipe would wait for it
+                        app.ShowFolderSettings();
+                        app.Dispatcher().BeginInvoke(() => { if (FolderExportUi.Choose(app.OpenSettings, app.FolderExport.Folder) is { } picked) app.FolderExport.Choose(picked); });
+                        break;
+                    case "all": app.FolderExport.WriteAll(); break;
+                    case "retry": app.FolderExport.Retry(); break;
+                }
+                return app.ExportState();
+            }
             case "recordaudio": app.Settings.RecordAudio = arg == "on"; app.Settings.Save(); app.SettingsChanged(); break;
             // 保存会议录音 on its own: "aacencode <wav>|<out.aac>", "aacrewrap <in.aac>|<out.m4a>[|<seconds>]".
             case "aacencode":

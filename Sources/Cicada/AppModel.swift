@@ -36,6 +36,9 @@ final class AppModel: ObservableObject {
     var roomEchoGate = true
     /// The Mac's lines of late (wall clock), and room lines waiting to be told apart from their echo.
     private var recentOnline: [EchoMatch.Heard] = []
+    /// The meeting's last 30 s, its lines and their translations, for 不用按键 to tell its echo.
+    private var recentMeeting: [EchoMatch.Heard] = []
+    private var recentMeetingSegs: [Int: (start: Double, end: Double)] = [:]
     private(set) var heldRoom: [(id: Int, seg: Segment, duration: Double, heard: EchoMatch.Heard)] = []
     /// What each engine shows as the line in progress, and when it last changed.
     private var liveMain = (src: "", dst: "", at: Date.distantPast)
@@ -162,6 +165,8 @@ final class AppModel: ObservableObject {
     let updates = Updates()
     let loginItem = LoginItem()
     lazy var notes = NotesEngine(ling: ling, store: store)
+    /// 存到文件夹 (settings › 通用).
+    lazy var folderExport = FolderExporter(store: store, settings: settings)
     lazy var notesWindow = NotesWindowController(model: self)
     lazy var importer = FileImporter(store: store, settings: settings, translator: translator)
     let vocabulary = Vocabulary(url: Vocabulary.defaultURL)
@@ -172,6 +177,7 @@ final class AppModel: ObservableObject {
     /// The last speaker edit, offered as 撤销 at the bottom of both windows for a few seconds.
     @Published var speakerUndo: SpeakerUndo?
     private var speakerSetting: AnyCancellable?
+    private var handsFreeSetting: AnyCancellable?
     var openOnboarding: (() -> Void)?
 
     var openMainWindow: (() -> Void)?
@@ -234,6 +240,21 @@ final class AppModel: ObservableObject {
             self.store.setVoice(lineID: line, voice)
             if let id = self.store.liveID { self.speakerNamer.guess(id) }
         }
+        // 不用按键 runs only while a meeting is being listened to: its lines are what tells the meeting's
+        // echo (`meetingSaid`), and the running unit mutes the built-in mic for other apps (#24), which
+        // then hear the virtual mic anyway. It pauses while 打开麦克风 is on: the room shares the unit and
+        // is heard unprocessed, and everyone at the table would be interpreted as me.
+        handsFreeSetting = Publishers.CombineLatest4(settings.$speakHandsFree, settings.$listenSource, settings.$speakEnabled, $running)
+            .sink { [weak self] on, _, _, _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.speak.handsFree = on && self.settings.speakEnabled && !self.settings.hearsRoom && self.running
+                        self.speak.keepUnit = self.settings.speakEnabled && self.running
+                        self.speak.refreshHandsFree()
+                    }
+                }
+            }
         speakerSetting = settings.$speakerVoices.sink { [weak self] on in
             TranscriptExport.voices = on
             self?.listen.router.setVoiceCapture(on)
@@ -301,6 +322,11 @@ final class AppModel: ObservableObject {
             }
         }
         importer.onFinished = { [weak self] id in self?.importFinished(id) }
+        // 存到文件夹: written once a record is settled, rewritten when it changes.
+        folderExport.settling = { [weak self] id in self?.notes.settling(id) ?? false }
+        store.onSave = { [weak self] id in self?.folderExport.saved(id) }
+        notes.finalDone = { [weak self] id in self?.folderExport.settled(id) }
+        folderExport.retry()
         notes.language = { [weak self] id in
             TranslationService.englishName(self?.notesLanguageCode(id) ?? "zh-CN")
         }
@@ -350,6 +376,15 @@ final class AppModel: ObservableObject {
             } else {
                 self.overlay.setSpeaking(.init(phase: phase, source: src, translation: dst))
             }
+        }
+        speak.meetingSaid = { [weak self] text, from, to in
+            let heard = EchoMatch.Heard(text: text, start: from.timeIntervalSinceReferenceDate, end: to.timeIntervalSinceReferenceDate)
+            guard let self else { return false }
+            if EchoMatch.isEcho(heard, online: self.recentMeeting) { return true }
+            // The meeting was playing: its line (and translation) may land a moment after Ming's answer.
+            guard self.listen.router.stats().silenceRun < EchoMatch.window else { return false }
+            try? await Task.sleep(nanoseconds: UInt64(EchoMatch.hold * 1_000_000_000))
+            return EchoMatch.isEcho(heard, online: self.recentMeeting)
         }
         speak.onUtterance = { [weak self] src, dst, from, to, ago in
             self?.recordSaid(src, dst, from: from, to: to, secondsAgo: ago)
@@ -750,6 +785,7 @@ final class AppModel: ObservableObject {
         store.end(at: endedAt, heardSpeech: listen.heardSpeech)
         if settings.speakerVoices, let ended { speakerNamer.guess(ended, force: true) }
         notes.finish()
+        if let ended { folderExport.ended(ended) }
         overlay.hide()
         refresh()
         updates.notifyIfDue()  // held while the meeting was on
@@ -1181,7 +1217,10 @@ final class AppModel: ObservableObject {
         networkMonitor.start(queue: DispatchQueue(label: "cicada.ai-network"))
         // Turning the local network permission on doesn't change the path: look again on coming back.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.ling.recheckLocalNetwork() }
+            MainActor.assumeIsolated {
+                self?.ling.recheckLocalNetwork()
+                self?.folderExport.retry()  // a folder permission fixed in System Settings
+            }
         }
     }
 
@@ -1430,6 +1469,7 @@ final class AppModel: ObservableObject {
         guard !roomListen.isRunning, !Recognition.legacy else { return }
         roomListen.echoCancelled = roomEchoCancel
         roomListen.echoBypassed = roomEchoBypass
+        roomListen.shareModels(from: listen)
         // Last meeting's measurement may be another room or another output: assume echo until measured.
         roomListen.echoGate.reset()
         // A, the gate: only the plain room mic heeds it (echo cancellation keeps talk over a remote speaker).
@@ -1452,6 +1492,11 @@ final class AppModel: ObservableObject {
 
     /// A sentence from the Mac's audio: recorded, and remembered to tell the room's copy of it.
     private func heardOnline(_ seg: Segment, duration: Double) {
+        let at = CFAbsoluteTimeGetCurrent()
+        recentMeeting.append(.init(text: seg.text, start: at - duration, end: at))
+        recentMeeting.removeAll { $0.end < at - 30 }
+        recentMeetingSegs[seg.id] = (at - duration, at)
+        recentMeetingSegs = recentMeetingSegs.filter { $0.value.end >= at - 30 }
         if roomListen.isRunning {
             let now = CFAbsoluteTimeGetCurrent()
             recentOnline.append(.init(text: seg.text, start: now - duration, end: now))
@@ -1503,6 +1548,7 @@ final class AppModel: ObservableObject {
     }
 
     private func translated(_ segID: Int, _ text: String) {
+        if let t = recentMeetingSegs[segID] { recentMeeting.append(.init(text: text, start: t.start, end: t.end)) }
         if heldJoin?.seg.id == segID { heldJoin?.translation = text }
         if let i = heldRoom.firstIndex(where: { $0.id == segID }) { heldRoom[i].seg.translation = text }
         guard let line = lineForSegment[segID], !refinedLines.contains(line) else { return }
@@ -1697,12 +1743,16 @@ final class AppModel: ObservableObject {
     func deleteSession(_ id: String) {
         importer.cancel(id)
         store.delete(id)
+        folderExport.deleted(id)
     }
 
     private func importFinished(_ id: String) {
         guard let s = store.session(id) else { return }
+        // The voices are known now: Ling's guess at who 说话人 1, 2… are, as at the end of a meeting.
+        if settings.speakerVoices { speakerNamer.guess(id, force: true) }
         let notesToo = settings.importNotes && ling.hasKey && !s.lines.isEmpty
         if notesToo { notes.generate(for: id) }
+        folderExport.ended(id)
         let content = UNMutableNotificationContent()
         content.title = L("\(s.displayTitle) 转好了")
         content.body = L("\(RecordList.length(s)) · \(s.lines.count) 句") + (notesToo ? L("，正在整理纪要") : "")
@@ -2265,6 +2315,9 @@ final class AppModel: ObservableObject {
         case "speakOut": speak.debugOutputURL = arg.isEmpty ? nil : URL(fileURLWithPath: arg)
         case "speakFile": speak.speakFile(URL(fileURLWithPath: arg))
         // talkDown / talkUp: the talk key held and let go, with the real microphone (audio tests).
+        // handsFree:on|off: 不用按键, as the setting.
+        case "handsFree": settings.speakHandsFree = arg != "off"
+        case "handsFreeDump": speak.setHandsFreeDump(arg.isEmpty ? nil : arg)
         case "talkDown": speak.pressBegan()
         case "talkUp": speak.pressEnded()
         // stall:<seconds> blocks the main thread, to check the watchdog samples it.
@@ -2333,6 +2386,22 @@ final class AppModel: ObservableObject {
         case "frame":
             debugLog("overlay frame=\(overlay.barFrame) font=\(overlay.currentFontSize)")
         case "import": importFiles(arg.split(separator: ",").map { URL(fileURLWithPath: String($0)) })
+        // 存到文件夹: exportFolder:<path> picks a folder (as 存到这里 does), exportFolder:off turns it
+        // off; exportAll is 也存一份; exportState replies with the index and the problem.
+        case "exportFolder":
+            if arg == "off" { folderExport.turnOff() } else { folderExport.choose(URL(fileURLWithPath: arg, isDirectory: true)) }
+        case "exportAll": folderExport.writeAll()
+        case "rename":
+            // rename:<id>=<title> as if typed into the record's title (empty: the automatic one).
+            let p = arg.split(separator: "=", maxSplits: 1).map(String.init)
+            store.rename(p[0], to: p.count > 1 ? p[1] : "")
+        case "exportState":
+            let x = folderExport
+            DebugRun.reply?.data = [
+                "on": x.on, "folder": settings.exportFolder, "checking": x.checking,
+                "problem": x.problem.map { "\($0)" } as Any, "files": x.index.files, "pending": x.index.pending,
+                "unwritten": x.unwritten.count, "lastFile": x.index.lastFile as Any,
+            ] as [String: Any]
         case "importCancel": importer.cancelAll()
         case "importRetry":
             // `<id>=<locale>`: as if that language was picked in 这场会议只留下了录音.
@@ -2375,6 +2444,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     private lazy var mainToolbar = MainToolbar(model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The palette is light only: in Dark Mode unstyled text and checkboxes turn white on white cards.
+        NSApp.appearance = NSAppearance(named: .aqua)
         NSApp.setActivationPolicy(model.settings.showInDock ? .regular : .accessory)
         menu.showMainWindow = { [weak self] in self?.showMainWindow() }
         menu.showOnboarding = { [weak self] in self?.showOnboarding() }
@@ -2435,6 +2506,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             // "听不到会议室": straight to System Settings, without bringing Cicada forward.
             if problem == "mic" {
                 model.openMicrophoneSettings()
+                return
+            }
+            // "纪要没存到文件夹": settings › 通用, where the row says what to do.
+            if problem == "folder" {
+                model.openSettings(.records)
                 return
             }
             // "有新版本": the panel shows the download, and install asks first if a meeting is on.
