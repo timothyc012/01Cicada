@@ -1,6 +1,44 @@
 import AVFoundation
 import Foundation
 
+enum DictationOutcome: Equatable {
+    case inserted, copied(reason: String), noAudio, noSpeech, failed(String), cancelled
+}
+
+struct DictationAudioLevel {
+    let rms: Float
+    let peak: Float
+    static let empty = Self(samples: [])
+    init(samples: [Float]) {
+        rms = samples.isEmpty ? 0 : sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+        peak = samples.reduce(0) { max($0, abs($1)) }
+    }
+    var isSilent: Bool { peak == 0 }
+    var normalized: Float { rms > 0 ? min(1, max(0, (20 * log10(rms) + 60) / 60)) : 0 }
+}
+
+/// Timestamped samples distinguish a quiet microphone from a stopped callback.
+struct DictationAudioHistory {
+    private var history: [Float] = []
+    private var lastInput: TimeInterval?
+    private var lastSignal: TimeInterval?
+    mutating func receive(_ level: DictationAudioLevel, at now: TimeInterval) {
+        if let lastInput, now - lastInput > 0.4 { history.removeAll(keepingCapacity: true) }
+        lastInput = now
+        if !level.isSilent { lastSignal = now }
+        history.append(level.normalized)
+        if history.count > 20 { history.removeFirst(history.count - 20) }
+    }
+    func levels(at now: TimeInterval) -> [Float] {
+        guard let lastInput, now - lastInput <= 0.4 else { return [] }
+        return history
+    }
+    func hasRecentAudio(at now: TimeInterval) -> Bool {
+        guard let lastSignal else { return false }
+        return now - lastSignal < 3
+    }
+}
+
 struct DictationRun {
     private var generation = 0
     private var active = false
@@ -29,6 +67,8 @@ struct DictationTranscript {
     @Published private(set) var text = ""
     @Published private(set) var lastText = ""
     @Published var message = ""
+    private(set) var outcome: DictationOutcome?
+    private(set) var runID = 0
     var onComplete: ((String) -> Bool)?
     var onChange: (() -> Void)?
     var busy: Bool { phase != .idle }
@@ -45,6 +85,9 @@ struct DictationTranscript {
     private let queue = DispatchQueue(label: "com.wquguru.cicada.dictation.audio")
     private var audioStats = DictationAudioStats()
     var audioDiagnostics: [String: Any] { audioStats.snapshot() }
+    var audioLevels: [Float] { audioStats.levels }
+    var hasAudio: Bool { audioStats.hasAudio }
+    var hasRecentAudio: Bool { audioStats.hasRecentAudio }
 
     private let recognize: @MainActor (String) async throws -> RecognitionStream
 
@@ -65,6 +108,8 @@ struct DictationTranscript {
         lastDeliveryDiagnostics = [:]
         let token = run.begin()
         currentToken = token
+        runID += 1
+        outcome = nil
         transcript = DictationTranscript(language: Locale(identifier: locale).languageCode ?? "en")
         text = ""
         message = ""
@@ -92,8 +137,7 @@ struct DictationTranscript {
                         }
                     } catch {
                         guard let self, self.run.accepts(token) else { return }
-                        self.cancel()
-                        self.message = error.localizedDescription
+                        self.cancel(outcome: .failed(error.localizedDescription))
                     }
                 }
                 let microphone: AudioSource
@@ -125,9 +169,7 @@ struct DictationTranscript {
                 self.onChange?()
             } catch {
                 guard self.run.accepts(token) else { return }
-                self.cancel()
-                self.message = error.localizedDescription
-                self.onChange?()
+                self.cancel(outcome: .failed(error.localizedDescription))
             }
         }
     }
@@ -147,7 +189,7 @@ struct DictationTranscript {
             let timeout = Task { [weak self] in
                 do { try await Task.sleep(for: .seconds(30)) } catch { return }
                 guard let self, self.run.accepts(token) else { return }
-                self.cancel(); self.message = L("听写超时，请重试")
+                self.cancel(outcome: .failed(L("听写超时，请重试")))
             }
             await input.finish()
             await finishingReader?.value
@@ -160,12 +202,14 @@ struct DictationTranscript {
             self.stream = nil; self.reader = nil
             if result.isEmpty {
                 self.message = L("没有听到语音")
+                self.outcome = self.hasAudio ? .noSpeech : .noAudio
                 self.lastDeliveryDiagnostics = ["reason": "empty_transcript"]
             }
             else {
                 let pasted = self.onComplete?(result) ?? self.destination?.deliver(result) ?? false
                 self.lastDeliveryDiagnostics = self.destination?.diagnostics ?? ["reason": "destination_missing"]
                 self.message = pasted ? L("已输入") : L("已复制，请粘贴到输入框")
+                self.outcome = pasted ? .inserted : .copied(reason: self.lastDeliveryDiagnostics["reason"] as? String ?? "destination_missing")
             }
             self.destination = nil
             debugLog("dictation: finished chars=\(result.count) audio=\(self.audioDiagnostics)")
@@ -176,7 +220,9 @@ struct DictationTranscript {
 
     private var currentToken = 0
 
-    func cancel() {
+    func cancel() { cancel(outcome: .cancelled) }
+
+    private func cancel(outcome: DictationOutcome) {
         run.cancel()
         preparation?.cancel(); preparation = nil
         limit?.cancel(); limit = nil
@@ -187,7 +233,9 @@ struct DictationTranscript {
         if let input { Task { await input.cancel() } }
         destination = nil
         phase = .idle
-        message = L("已取消听写")
+        self.outcome = outcome
+        if case .failed(let detail) = outcome { message = detail }
+        else { message = L("已取消听写") }
         onChange?()
     }
 
@@ -203,15 +251,20 @@ private final class DictationAudioStats: @unchecked Sendable {
     private var captured = 0
     private var submitted = 0
     private var peak: Float = 0
+    private var history = DictationAudioHistory()
+    var levels: [Float] { lock.withLock { history.levels(at: ProcessInfo.processInfo.systemUptime) } }
+    var hasRecentAudio: Bool { lock.withLock { history.hasRecentAudio(at: ProcessInfo.processInfo.systemUptime) } }
+    var hasAudio: Bool { lock.withLock { peak > 0 } }
 
     func receive(_ buffer: AVAudioPCMBuffer, submitted frames: AVAudioFrameCount) {
-        var level: Float = 0
+        let level: DictationAudioLevel
         if let samples = buffer.floatChannelData?[0] {
-            for i in 0..<Int(buffer.frameLength) { level = max(level, abs(samples[i])) }
-        }
+            level = DictationAudioLevel(samples: Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))))
+        } else { level = .empty }
         lock.withLock {
             buffers += 1; captured += Int(buffer.frameLength); submitted += Int(frames)
-            peak = max(peak, level)
+            peak = max(peak, level.peak)
+            history.receive(level, at: ProcessInfo.processInfo.systemUptime)
         }
     }
 

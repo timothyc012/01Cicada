@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
     let toggleKey = HotKey(id: 2, shortcut: .defaultToggle)
     let dictationKey = HotKey(id: 3, shortcut: .defaultDictation)
     let dictation = DictationEngine()
+    let dictationHUD = DictationHUDController()
     @Published var dictating = false
     @Published var dictationKeyTaken = false
     private(set) var dictationShortcutPresses = 0
@@ -423,6 +424,7 @@ final class AppModel: ObservableObject {
         dictation.onChange = { [weak self] in
             guard let self else { return }
             self.dictating = self.dictation.busy
+            self.dictationHUD.update(engine: self.dictation, shortcut: self.settings.dictationKey)
             self.objectWillChange.send()
         }
         dictationKey.onDown = { [weak self] in
@@ -1849,6 +1851,17 @@ final class AppModel: ObservableObject {
             DebugRun.reply?.data = ["phase": String(describing: dictation.phase), "text": dictation.text,
                                     "lastText": dictation.lastText, "message": dictation.message,
                                     "accessibility": AXIsProcessTrusted()].merging(dictationDiagnostics()) { a, _ in a }
+        case "dictationHUD":
+            if dictation.busy { debugFail("HUD preview unavailable during dictation") }
+            else if !dictationHUD.preview(arg, shortcut: settings.dictationKey.display) { debugFail("Unknown HUD preview state") }
+            let snapshot = dictationHUD.snapshot
+            DebugRun.reply?.data = snapshot
+        case "dictationHUDState":
+            let snapshot = dictationHUD.snapshot
+            DebugRun.reply?.data = snapshot
+        case "dictationHUDRender":
+            do { try dictationHUD.render(to: URL(fileURLWithPath: arg)) }
+            catch { debugFail(error.localizedDescription) }
         case "dictationTarget":
             DebugRun.reply?.data = DictationPaste(requestManualAccessibility: arg == "enable").diagnostics
         case "ping":
@@ -2775,6 +2788,32 @@ struct CicadaMain {
             } catch {
                 FileHandle.standardError.write("render failed: \(error)\n".data(using: .utf8)!)
                 exit(1)
+            }
+        }
+        if let i = args.firstIndex(of: "--render-dictation-hud"), args.count > i + 1 {
+            MainActor.assumeIsolated {
+                let app = NSApplication.shared
+                app.setActivationPolicy(.prohibited)
+                app.finishLaunching()
+                let before = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+                let hud = DictationHUDController()
+                app.appearance = NSAppearance(named: args.contains("--dark") ? .darkAqua : .aqua)
+                let state = args.count > i + 2 ? args[i + 2] : "recording"
+                guard hud.preview(state, shortcut: Shortcut.defaultDictation.display) else { exit(1) }
+                RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+                do {
+                    let url = URL(fileURLWithPath: args[i + 1])
+                    try hud.render(to: url)
+                    var snapshot = hud.snapshot
+                    snapshot["frontmostBefore"] = before
+                    snapshot["frontmostAfter"] = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+                    try JSONSerialization.data(withJSONObject: snapshot, options: [.prettyPrinted, .sortedKeys])
+                        .write(to: url.appendingPathExtension("json"))
+                    exit(0)
+                } catch {
+                    FileHandle.standardError.write("HUD render failed: \(error)\n".data(using: .utf8)!)
+                    exit(1)
+                }
             }
         }
         // AppKit adds "进入全屏幕" to a menu titled 显示 (View) unless told before launch;

@@ -7,6 +7,14 @@
     "image": null,
     "items": [
       {
+        "kind": "new",
+        "platforms": [
+          "mac"
+        ],
+        "title": "听写时，屏幕上方显示不抢焦点的玻璃状态条。",
+        "text": "显示准备、真实麦克风音量、录音时间和输入结果。只复制时会说明原因并提示按 ⌘V 粘贴；没有声音或出错时停留更久。"
+      },
+      {
         "kind": "fixed",
         "platforms": [
           "mac"

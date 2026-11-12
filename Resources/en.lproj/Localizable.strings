@@ -1517,3 +1517,22 @@
 "没存到文件夹 ·" = "Not saved to the folder ·";
 "整理好后存到 %@" = "Saves to %@ once the notes are ready";
 "在访达中显示" = "Show in Finder";
+
+/* DictationHUD */
+"正在准备听写" = "Preparing dictation";
+"马上就可以说话" = "You can speak in a moment";
+"正在听写" = "Listening";
+"暂时没有声音，请检查麦克风" = "No recent audio · Check your microphone";
+"再按 %@ 完成" = "Press %@ again to finish";
+"正在转成文字" = "Transcribing";
+"请稍等片刻" = "Just a moment";
+"文字已发送到原来的输入框" = "Text sent to the original field";
+"输入位置变了 · 按 ⌘V 粘贴" = "Input location changed · Press ⌘V to paste";
+"需要辅助功能权限 · 按 ⌘V 粘贴" = "Accessibility access needed · ⌘V to paste";
+"没有可用的输入框 · 按 ⌘V 粘贴" = "No available input field · Press ⌘V to paste";
+"未能自动输入 · 按 ⌘V 粘贴" = "Automatic insertion unavailable · ⌘V to paste";
+"没有收到麦克风声音" = "No microphone audio";
+"请检查输入麦克风后重试" = "Check your input microphone and retry";
+"请再说一次" = "Please try speaking again";
+"听写未完成" = "Dictation failed";
+"没有输入文字" = "No text inserted";

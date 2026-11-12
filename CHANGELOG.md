@@ -5,6 +5,10 @@ writes it from the `feat:` and `fix:` commits since the last tag, grouped by pla
 scope), and the release workflow publishes it as the release notes. Since 1.1.2 every release ships
 every platform (one with nothing new says No changes); earlier ones shipped only those listed. Lines under `## Unreleased` become the release's summary. The Chinese changelog for users is `site/changelog.json`.
 
+## Unreleased
+
+Mac dictation now shows a glass status panel with real audio levels, elapsed time and delivery results while keeping the input field focused.
+
 ## 1.9.0 — 2026-11-12
 
 ### Mac
