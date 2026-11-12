@@ -68,6 +68,17 @@ final class LingStub: URLProtocol, @unchecked Sendable {
         return ling
     }
 
+    @Test func localGemmaWorksWithoutAnAPIKey() async throws {
+        let ling = customClient()
+        ling.config = { AIConfig(provider: .custom, base: URL(string: "http://localhost:11434/v1/"), textModel: "gemma4:31b") }
+        #expect(AIKey.read("custom") == nil)
+        #expect(ling.hasKey && ling.key == "")
+        LingStub.reset(200, LingStub.chatReply("Die Besprechung beginnt morgen."))
+        #expect(try await ling.chat(content: "Translate this sentence.", instruction: "Translate.", priority: .translate)
+                == "Die Besprechung beginnt morgen.")
+        #expect(LingStub.seen.last?.body["reasoning_effort"] as? String == "none")
+    }
+
     @Test func aServerThatRefusesTemplateKwargsIsAskedWithoutThem() async throws {
         LingStub.reset(200, "")
         LingStub.respond = { body in body["chat_template_kwargs"] != nil ? (400, "{}") : (200, LingStub.chatReply("好")) }

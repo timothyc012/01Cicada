@@ -182,7 +182,14 @@ struct AIConfig: Equatable {
         case .custom:
             body["max_tokens"] = maxTokens
             body["temperature"] = 0.2
-            if templateKwargs { body["chat_template_kwargs"] = ["enable_thinking": false] }
+            let model = body["model"] as? String ?? textModel
+            if let base, AIProvider.isLocal(base.absoluteString), model.split(separator: ":").first == "gemma4" {
+                // Ollama ignores chat_template_kwargs for Gemma 4. Thinking can
+                // consume the whole translation budget before it returns any text.
+                body["reasoning_effort"] = "none"
+            } else if templateKwargs {
+                body["chat_template_kwargs"] = ["enable_thinking": false]
+            }
         }
     }
 

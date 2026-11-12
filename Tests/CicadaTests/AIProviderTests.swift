@@ -26,6 +26,30 @@ struct AIProviderTests {
         #expect(plain["chat_template_kwargs"] == nil)
     }
 
+    @Test func localGemma4UsesOllamaReasoningControl() {
+        for host in ["localhost", "127.0.0.1", "[::1]"] {
+            for model in ["gemma4", "gemma4:31b", "gemma4:e4b"] {
+                var body: [String: Any] = [:]
+                AIConfig(provider: .custom, base: URL(string: "http://\(host):11434/v1/"), textModel: model)
+                    .shape(&body, maxTokens: 400, templateKwargs: false)
+                #expect(body["reasoning_effort"] as? String == "none")
+                #expect(body["chat_template_kwargs"] == nil)
+                #expect(body["max_tokens"] as? Int == 400)
+            }
+        }
+    }
+
+    @Test func gemmaOverrideDoesNotChangeOtherCustomServers() {
+        for (base, model) in [("https://api.example.com/v1/", "gemma4:31b"),
+                              ("http://localhost:11434/v1/", "gemma4-other:31b"),
+                              ("http://localhost:11434/v1/", "qwen3:8b")] {
+            var body: [String: Any] = [:]
+            AIConfig(provider: .custom, base: URL(string: base), textModel: model).shape(&body, maxTokens: 400)
+            #expect(body["reasoning_effort"] == nil)
+            #expect((body["chat_template_kwargs"] as? [String: Bool])?["enable_thinking"] == false)
+        }
+    }
+
     @Test func aThinkingModelIsSeenFromItsReply() {
         func reply(_ message: [String: Any], usage: [String: Any]? = nil) -> [String: Any] {
             var r: [String: Any] = ["choices": [["message": message]]]

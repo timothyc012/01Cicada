@@ -214,7 +214,7 @@ struct OnboardingKeyStep: View {
                         .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 }
                 Spacer()
-                if let key = ling.key {
+                if let key = ling.key, !key.isEmpty {
                     Text(AIKey.masked(key)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.secondary)
                 }
             }
