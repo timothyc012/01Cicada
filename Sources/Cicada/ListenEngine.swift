@@ -566,7 +566,7 @@ final class ListenEngine {
 
     /// 电脑和会议室: take the online voices out of the room mic with the echo-cancelling unit. Off,
     /// or when the unit can't be had, the plain mic is gated while the Mac plays speech (`gateEcho`).
-    var echoCancelled = true
+    var echoCancelled = false
     /// With `echoCancelled`: the room through the unit with processing off (the plain mic's sound,
     /// gated as `RoomMic` is), so a talk-key press can turn it on (`VoiceMic.attach(processing:)`).
     var echoBypassed = false

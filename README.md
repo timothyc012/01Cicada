@@ -46,6 +46,8 @@ Installers are available on [the download page](https://cicada.indaloop.app/en/d
 
 ## Features
 
+Room microphone capture uses the standard input path by default so other dictation and recording apps can keep using the microphone. Echo gating and transcript deduplication remain enabled.
+
 ### Live notes and bilingual transcript
 
 As the meeting runs, the notes window organizes a summary, topics and key points, conclusions, to-dos, a fishbone diagram, and a glossary of names and terms. Click any conclusion or to-do to jump straight back to the original lines. Pressing `⌘F` searches both the canonical spelling and misrecognized variants.

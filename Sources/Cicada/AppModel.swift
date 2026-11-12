@@ -28,13 +28,11 @@ final class AppModel: ObservableObject {
     /// 电脑和会议室: the microphone side, its own engine (language, pauses, model), as Feishu keeps the
     /// online and the room streams apart instead of mixing them into one track.
     lazy var roomListen = ListenEngine(settings: settings, role: .room)
-    /// Debug (`roomEcho:on|off|bypass`, `roomGate:off`), next meeting. By default the room is heard
-    /// through the echo-cancelling unit with its processing off (`bypass`): the plain mic's sound and
-    /// the gate, as `RoomMic` (processing on let no echo through but lost most of what people at the
-    /// table said), while the talk key turns processing on for a press. With the plain mic the press
-    /// had no echo cancellation and was dropped whenever the other side was talking.
-    var roomEchoCancel = true
-    var roomEchoBypass = true
+    /// Plain capture keeps the microphone available to other recording apps.
+    /// VoiceProcessingIO can starve their input even with its processing bypassed.
+    /// Keep the echo gate and text deduplication; roomEcho:on|bypass is diagnostic opt-in.
+    var roomEchoCancel = false
+    var roomEchoBypass = false
     var roomEchoGate = true
     /// The Mac's lines of late (wall clock), and room lines waiting to be told apart from their echo.
     private var recentOnline: [EchoMatch.Heard] = []
