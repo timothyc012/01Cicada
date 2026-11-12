@@ -40,6 +40,8 @@ struct DictationTranscript {
     private var preparation: Task<Void, Never>?
     private var limit: Task<Void, Never>?
     private var destination: DictationPaste?
+    private(set) var lastDeliveryDiagnostics: [String: Any] = [:]
+    var deliveryDiagnostics: [String: Any] { destination?.diagnostics ?? lastDeliveryDiagnostics }
     private let queue = DispatchQueue(label: "com.wquguru.cicada.dictation.audio")
     private var audioStats = DictationAudioStats()
     var audioDiagnostics: [String: Any] { audioStats.snapshot() }
@@ -60,6 +62,7 @@ struct DictationTranscript {
     func start(locale: String, device: OutputDevice?, file: URL? = nil) {
         guard !busy else { return }
         destination = DictationPaste()
+        lastDeliveryDiagnostics = [:]
         let token = run.begin()
         currentToken = token
         transcript = DictationTranscript(language: Locale(identifier: locale).languageCode ?? "en")
@@ -155,13 +158,18 @@ struct DictationTranscript {
             self.phase = .idle
             self.run.cancel()
             self.stream = nil; self.reader = nil
-            if result.isEmpty { self.message = L("没有听到语音") }
+            if result.isEmpty {
+                self.message = L("没有听到语音")
+                self.lastDeliveryDiagnostics = ["reason": "empty_transcript"]
+            }
             else {
                 let pasted = self.onComplete?(result) ?? self.destination?.deliver(result) ?? false
+                self.lastDeliveryDiagnostics = self.destination?.diagnostics ?? ["reason": "destination_missing"]
                 self.message = pasted ? L("已输入") : L("已复制，请粘贴到输入框")
             }
             self.destination = nil
             debugLog("dictation: finished chars=\(result.count) audio=\(self.audioDiagnostics)")
+            debugLog("dictation delivery: \(self.lastDeliveryDiagnostics)")
             self.onChange?()
         }
     }

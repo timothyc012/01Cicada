@@ -4,8 +4,15 @@ import Carbon.HIToolbox
 
 struct DictationPastePolicy {
     static func canPaste(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool) -> Bool {
-        guard let target, let current else { return false }
-        return target == current && sameField && trusted
+        blockReason(target: target, current: current, sameField: sameField, trusted: trusted) == nil
+    }
+
+    static func blockReason(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool) -> String? {
+        guard trusted else { return "accessibility_denied" }
+        guard let target else { return "no_destination_app" }
+        guard current == target else { return "application_changed" }
+        guard sameField else { return "focused_field_changed" }
+        return nil
     }
 }
 
@@ -13,35 +20,66 @@ struct DictationPastePolicy {
 @MainActor final class DictationPaste {
     private let pid: pid_t?
     private let field: AXUIElement?
+    private(set) var diagnostics: [String: Any]
 
-    init() {
+    init(requestManualAccessibility: Bool = false) {
         let app = NSWorkspace.shared.frontmostApplication
         pid = app?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : app?.processIdentifier
-        field = Self.focusedField(pid)
+        var manualStatus = -1
+        if requestManualAccessibility, let pid, AXIsProcessTrusted() {
+            manualStatus = Int(AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid),
+                "AXManualAccessibility" as CFString, kCFBooleanTrue).rawValue)
+        }
+        var status = -1
+        field = Self.focusedField(pid, status: &status)
+        diagnostics = ["targetApp": app?.bundleIdentifier ?? "", "targetPID": Int(pid ?? -1),
+                       "targetFieldCaptured": field != nil, "targetRole": Self.role(field),
+                       "targetQueryStatus": status, "manualAccessibilityStatus": manualStatus,
+                       "reason": "captured"]
     }
 
-    private static func focusedField(_ pid: pid_t?) -> AXUIElement? {
+    private static func focusedField(_ pid: pid_t?, status: inout Int) -> AXUIElement? {
         guard let pid, AXIsProcessTrusted() else { return nil }
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute as CFString, &value) == .success,
+        let result = AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute as CFString, &value)
+        status = Int(result.rawValue)
+        guard result == .success,
               let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         return (value as! AXUIElement)
+    }
+
+    private static func role(_ field: AXUIElement?) -> String {
+        guard let field else { return "" }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(field, kAXRoleAttribute as CFString, &value) == .success else { return "" }
+        return value as? String ?? ""
     }
 
     func deliver(_ text: String) -> Bool {
         let board = NSPasteboard.general
         Self.copy(text, to: board)
-        let current = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let focused = Self.focusedField(current)
+        let currentApp = NSWorkspace.shared.frontmostApplication
+        let current = currentApp?.processIdentifier
+        var status = -1
+        let focused = Self.focusedField(current, status: &status)
         let sameField = field != nil && focused != nil && CFEqual(field!, focused!)
-        guard DictationPastePolicy.canPaste(target: pid, current: current, sameField: sameField, trusted: AXIsProcessTrusted()),
-              let source = CGEventSource(stateID: .combinedSessionState),
+        let reason = DictationPastePolicy.blockReason(target: pid, current: current, sameField: sameField, trusted: AXIsProcessTrusted())
+        diagnostics.merge(["currentApp": currentApp?.bundleIdentifier ?? "", "currentPID": Int(current ?? -1),
+                           "currentFieldCaptured": focused != nil, "currentRole": Self.role(focused),
+                           "currentQueryStatus": status, "sameField": sameField,
+                           "reason": reason ?? "ready"]) { _, new in new }
+        guard reason == nil else { return false }
+        guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else { return false }
+              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
+            diagnostics["reason"] = "keyboard_events_unavailable"
+            return false
+        }
         down.flags = .maskCommand
         up.flags = .maskCommand
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
+        diagnostics["reason"] = "paste_posted"
         return true
     }
 

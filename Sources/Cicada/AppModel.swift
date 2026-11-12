@@ -1105,7 +1105,9 @@ final class AppModel: ObservableObject {
          "handlerStatus": Int(dictationKey.handlerStatus),
          "registrationStatus": dictationKey.registrationStatus.map { Int($0) } ?? -1,
          "shortcutsSuspended": shortcutsSuspended, "shortcutPresses": dictationShortcutPresses,
-         "audio": dictation.audioDiagnostics]
+         "keyHeld": dictationKey.pressed,
+         "physicalKeyDown": CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(settings.dictationKey.keyCode)),
+         "audio": dictation.audioDiagnostics, "delivery": dictation.deliveryDiagnostics]
     }
 
     enum ShortcutRole { case talk, toggle, dictation }
@@ -1847,6 +1849,8 @@ final class AppModel: ObservableObject {
             DebugRun.reply?.data = ["phase": String(describing: dictation.phase), "text": dictation.text,
                                     "lastText": dictation.lastText, "message": dictation.message,
                                     "accessibility": AXIsProcessTrusted()].merging(dictationDiagnostics()) { a, _ in a }
+        case "dictationTarget":
+            DebugRun.reply?.data = DictationPaste(requestManualAccessibility: arg == "enable").diagnostics
         case "ping":
             let snapshot = debugSnapshot(["build"])
             DebugRun.reply?.data = snapshot

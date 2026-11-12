@@ -136,7 +136,7 @@ final class HotKey {
     private(set) var handlerStatus: OSStatus = noErr
     private(set) var registrationStatus: OSStatus?
     private let id: UInt32
-    private var pressed = false
+    private(set) var pressed = false
 
     init(id: UInt32, shortcut: Shortcut) {
         self.id = id

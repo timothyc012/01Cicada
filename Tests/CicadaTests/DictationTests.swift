@@ -34,6 +34,37 @@ import Testing
         #expect(!DictationPastePolicy.canPaste(target: 11, current: 11, sameField: true, trusted: false))
         #expect(!DictationPastePolicy.canPaste(target: nil, current: nil, sameField: true, trusted: true))
     }
+    @Test func pasteBlockReasonAllowsTheOriginalAppAndField() {
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: true, trusted: true) == nil)
+    }
+    @Test func pasteBlockReasonIdentifiesMissingAccessibility() {
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: true, trusted: false) == "accessibility_denied")
+    }
+    @Test func pasteBlockReasonIdentifiesMissingDestination() {
+        #expect(DictationPastePolicy.blockReason(target: nil, current: 11, sameField: true, trusted: true) == "no_destination_app")
+        #expect(DictationPastePolicy.blockReason(target: nil, current: nil, sameField: true, trusted: true) == "no_destination_app")
+    }
+    @Test func pasteBlockReasonIdentifiesChangedOrClosedApplication() {
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 12, sameField: true, trusted: true) == "application_changed")
+        #expect(DictationPastePolicy.blockReason(target: 11, current: nil, sameField: true, trusted: true) == "application_changed")
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 12, sameField: false, trusted: true) == "application_changed")
+    }
+    @Test func pasteBlockReasonIdentifiesChangedFocusedField() {
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: false, trusted: true) == "focused_field_changed")
+    }
+    @Test func pasteBlockReasonPreservesTheExistingSafetyPolicy() {
+        let processes: [pid_t?] = [nil, 11, 12]
+        for target in processes {
+            for current in processes {
+                for sameField in [false, true] {
+                    for trusted in [false, true] {
+                        let reason = DictationPastePolicy.blockReason(target: target, current: current, sameField: sameField, trusted: trusted)
+                        #expect((reason == nil) == DictationPastePolicy.canPaste(target: target, current: current, sameField: sameField, trusted: trusted))
+                    }
+                }
+            }
+        }
+    }
     @MainActor @Test func interpretingRehearsalCannotStartWhileDictating() async {
         let settings = AppSettings()
         let speak = SpeakEngine(settings: settings, voiceMic: VoiceMic())
