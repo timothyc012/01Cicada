@@ -92,6 +92,8 @@ Click **Share…** to generate a link to the notes (optionally including the ful
 
 Press `Control+Option+D` in a text field, speak, then press it again to insert your words. Settings → Dictation changes the language and shortcut. Allow Accessibility for automatic paste; if you switch apps or fields, the text is copied instead. Recordings stop after two minutes, and the last result can be copied from the menu panel. Dictation uses original-language recognition without translation or TTS. The app opens idle by default; Settings → Dictation can enable listening to computer audio at launch. Dictation text remains on the clipboard after insertion. This addition is currently Mac-only.
 
+Press and release once to start, then press and release again to finish; holding the shortcut does not repeatedly start and stop recording.
+
 ### Self-hosted Gemma translation and notes
 
 In Settings → AI Service, choose Other (OpenAI-compatible), enter your server’s `/v1` address and model name (for example `gemma4:31b`). Local and LAN servers that do not require authentication can leave the key empty. Gemma 4 behind a local Ollama server or SSH tunnel uses `reasoning_effort: none` for responsive text translation and notes. Enable Send audio and text only to your service to bypass Google; speech recognition stays on the Mac unless configured separately.

@@ -65,4 +65,28 @@ import Testing
         #expect(ups == 3)
         withExtendedLifetime(hotkey) {}
     }
+
+    @MainActor @Test func heldPressAndDuplicateReleasesProduceOnePair() throws {
+        _ = NSApplication.shared
+        let hotkey = HotKey(id: 106, shortcut: .defaultDictation)
+        var downs = 0
+        var ups = 0
+        hotkey.onDown = { downs += 1 }
+        hotkey.onUp = { ups += 1 }
+
+        // A release without a matching press must not drive a push-to-talk action.
+        _ = try send(UInt32(kEventHotKeyReleased), id: 106)
+        #expect(ups == 0)
+        for _ in 0..<3 { _ = try send(UInt32(kEventHotKeyPressed), id: 106) }
+        #expect(downs == 1)
+        for _ in 0..<3 { _ = try send(UInt32(kEventHotKeyReleased), id: 106) }
+        #expect(ups == 1)
+
+        // The next physical press/release cycle remains available immediately.
+        _ = try send(UInt32(kEventHotKeyPressed), id: 106)
+        _ = try send(UInt32(kEventHotKeyReleased), id: 106)
+        #expect(downs == 2)
+        #expect(ups == 2)
+        withExtendedLifetime(hotkey) {}
+    }
 }

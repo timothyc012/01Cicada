@@ -136,6 +136,7 @@ final class HotKey {
     private(set) var handlerStatus: OSStatus = noErr
     private(set) var registrationStatus: OSStatus?
     private let id: UInt32
+    private var pressed = false
 
     init(id: UInt32, shortcut: Shortcut) {
         self.id = id
@@ -152,7 +153,16 @@ final class HotKey {
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
             guard hkID.id == hk.id else { return OSStatus(eventNotHandledErr) }
-            if GetEventKind(event) == UInt32(kEventHotKeyPressed) { hk.onDown?() } else { hk.onUp?() }
+            if GetEventKind(event) == UInt32(kEventHotKeyPressed) {
+                // A held key can send repeated presses; toggles must run once per press/release.
+                guard !hk.pressed else { return noErr }
+                hk.pressed = true
+                hk.onDown?()
+            } else {
+                guard hk.pressed else { return noErr }
+                hk.pressed = false
+                hk.onUp?()
+            }
             return noErr
         }, 2, &types, me, &handler)
         if handlerStatus != noErr { debugLog("hotkey handler \(id) not installed: \(handlerStatus)") }
@@ -185,6 +195,7 @@ final class HotKey {
     func unregister() {
         if let ref { UnregisterEventHotKey(ref) }
         ref = nil
+        pressed = false
     }
 }
 

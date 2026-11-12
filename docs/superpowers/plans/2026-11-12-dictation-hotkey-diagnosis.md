@@ -12,4 +12,12 @@ The local CLT install has mismatched public/private PackageDescription interface
 
 `scripts/test.sh --manifest-cache none -Xbuild-tools-swiftc -vfsoverlay -Xbuild-tools-swiftc /tmp/cicada-hotkey-repro/manifest-overlay.json -Xbuild-tools-swiftc -module-cache-path -Xbuild-tools-swiftc /tmp/cicada-hotkey-repro/manifest-cache`
 
-Pending: one physical press of the restored Control+Command+D combination. An earlier 40-second observation of Ctrl+Option+D saw no press events, but the user had not confirmed performing that test. Do not conclude a root cause or claim a fix until a physical press is observed. Cicada Accessibility approval is also still pending; do not grant it based on approval to update AWhisper.
+Initial observation: an earlier 40-second check of Ctrl+Option+D saw no press events, but the user had not confirmed performing that test. Physical presses were subsequently observed with the restored Control+Command+D combination (below). Cicada Accessibility approval is still pending; do not grant it based on approval to update AWhisper.
+
+## Physical input evidence and held-key fix
+
+After the user tried the restored shortcut, diagnostics recorded 14 actual presses. The key is reaching Cicada. Several arrived while the previous action was preparing or had just stopped, repeatedly cancelling/restarting the run. The microphone supplied nonzero audio (one run: 95 buffers, 456,000 captured frames, 151,796 submitted frames, peak 0.0437); a short run produced two recognized characters. Accessibility remains false, independently preventing automatic insertion.
+
+A native Carbon regression confirmed repeated pressed events were forwarded repeatedly, and unmatched/duplicate releases also invoked callbacks. Added held-state filtering: only the first down is delivered until its release; only a matching release is delivered; unregister resets the state. Separate complete presses still work. RED: `/tmp/cicada-hotkey-repeat-red.log`. Full GREEN: 355 tests pass (`/tmp/cicada-hotkey-repeat-green.log`). The fix prevents duplicate events from disrupting dictation; it does not establish the cause of every empty transcription. Auto-paste permission is still awaiting explicit user approval.
+
+Installed the tested held-key fix at `build/Cicada.app` after confirming dictation idle and quitting natively. Backup: `build/Cicada-before-held-key-fix.app`. Signature verification passed with the same bundle ID/designated requirement; the installed executable matches the tested binary. Relaunched with Control+Command+D still registered successfully. Native physical validation of the deduplicated behavior and automatic paste remain pending.
