@@ -245,7 +245,7 @@ private final class DictationHUDPanel: NSPanel {
             background = effect; materialName = "NSVisualEffectView.behindWindow"
         }
         // Keep labels above the backdrop so transparency never fades the text.
-        background.alphaValue = reduce || contrast ? 1 : 0.65
+        background.alphaValue = reduce || contrast ? 1 : 0.28
         backdrop = background; addSubview(background); addSubview(content)
     }
     func preferredWidth(_ copy: DictationHUDCopy) -> CGFloat {
@@ -294,8 +294,8 @@ private final class DictationHUDHighlight: NSView {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 22, yRadius: 22)
         NSGraphicsContext.saveGraphicsState(); shape.addClip()
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        NSGradient(starting: NSColor.white.withAlphaComponent(dark ? 0.05 : 0.12),
-                   ending: NSColor.white.withAlphaComponent(dark ? 0.005 : 0.015))?.draw(in: bounds, angle: -90)
+        NSGradient(starting: NSColor.white.withAlphaComponent(dark ? 0.025 : 0.04),
+                   ending: NSColor.white.withAlphaComponent(dark ? 0.002 : 0.005))?.draw(in: bounds, angle: -90)
         NSColor.white.withAlphaComponent(dark ? 0.18 : 0.40).setStroke(); shape.lineWidth = 1; shape.stroke()
         let shine = NSBezierPath(); shine.move(to: NSPoint(x: bounds.width * 0.18, y: bounds.height - 1))
         shine.line(to: NSPoint(x: bounds.width * 0.82, y: bounds.height - 1))

@@ -50,3 +50,9 @@
 - Native backdrop alpha reduced to0.65, with the content rendered as a separate full-opacity sibling. Reduced gloss gradient and edge highlights; accessibility opaque surface remains alpha1.
 - All369 tests passed; installed signed app preserves existing localization resources and fixed development designated requirement. Previous bundle kept at `build/Cicada-before-clearer-glass.app`.
 - Installed no-audio preview confirmed backdropOpacity0.65/contentOpacity1, Korean labels, labelsFit=true, key/main=false and identical before/after focus diagnostics. Preview switched off afterward; no actual recording or paste was triggered.
+
+## Approved glassmorphism refinement (2026-11-13)
+
+- User selected proposal2 after reviewing side-by-side comparison. Backdrop alpha0.28 and near-clear highlight fill preserve fully opaque labels/meters and solid accessibility fallback.
+- Existing369 tests passed on the proposal binary. Installed with unchanged Korean resources and fixed dev designated requirement; previous app preserved at `build/Cicada-before-glassmorphism-approved.app`.
+- Installed no-audio preview reports backdropOpacity0.28/contentOpacity1, Korean title and labelsFit, key/main=false with identical before/after focus diagnostics. Preview then switched off; no recording/paste was triggered.
