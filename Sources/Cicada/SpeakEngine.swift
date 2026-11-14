@@ -471,10 +471,19 @@ final class SpeakEngine {
             debugLog("speak: press while \(phase) ignored")
             return
         }
+        // Out of the speakers, the mic would record the last translation still playing.
+        if phase == .speaking && settings.speakToSpeakers {
+            onNotice?(L("等译文读完再按"))
+            return
+        }
         if probe == nil {
-            // 只听会议室 (older macOS): everyone is at the table and hears you; there is no call to speak into.
-            if settings.listensToRoom { onNotice?(L("同声传译是给线上会议用的")); return }
-            if outputDevice() == nil { onNotice?(L("还没装虚拟麦克风，线上的人听不到你")); return }
+            if settings.speakToSpeakers {
+                if outputDevice() == nil { onNotice?(L("找不到扬声器")); return }
+            } else {
+                // 只听会议室 (older macOS): everyone is at the table and hears you; there is no call to speak into.
+                if settings.listensToRoom { onNotice?(L("同声传译是给线上会议用的")); return }
+                if outputDevice() == nil { onNotice?(L("还没装虚拟麦克风，线上的人听不到你")); return }
+            }
         }
         guard let format = analyzerFormat, let input = beginUtterance() else {
             Task { await prepare() }
@@ -807,10 +816,10 @@ final class SpeakEngine {
             }
             // The virtual mic went away during the press: no voice at all rather than the speakers.
             guard outputDevice() != nil else {
-                debugLog("speak: no virtual mic, nothing sent")
+                debugLog("speak: no output device, nothing sent")
                 if probe == nil { onTiming?(timing(voice: nil)) }
                 phase = .idle
-                onLive?(.idle, text, L("没有虚拟麦克风 · 没有说出去"))
+                onLive?(.idle, text, settings.speakToSpeakers ? L("找不到扬声器 · 没有读出来") : L("没有虚拟麦克风 · 没有说出去"))
                 probe?.finish()
                 return
             }
@@ -847,9 +856,16 @@ final class SpeakEngine {
     /// Where a translation goes: a virtual mic, so only the people online hear it. Never the
     /// speakers: the room already heard you, and a voice after yours only talks over it. A
     /// `speakOutput` stored before this (the speakers, say) no longer counts. nil: none installed.
+    /// The one exception is 从扬声器读出来 (face to face, nobody online): the system output.
     func outputDevice() -> OutputDevice? {
-        let all = AudioDevices.outputs()
-        if let d = all.first(where: { $0.uid == settings.speakOutput }), d.isVirtualMic { return d }
+        Self.output(toSpeakers: settings.speakToSpeakers, stored: settings.speakOutput,
+                    all: AudioDevices.outputs(), systemOutput: AudioDevices.defaultOutput)
+    }
+
+    nonisolated static func output(toSpeakers: Bool, stored: String, all: [OutputDevice],
+                                   systemOutput: OutputDevice?) -> OutputDevice? {
+        if toSpeakers { return systemOutput }
+        if let d = all.first(where: { $0.uid == stored }), d.isVirtualMic { return d }
         return all.first(where: \.isVirtualMic)
     }
 

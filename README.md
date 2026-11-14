@@ -72,6 +72,8 @@ On a Mac, you can also turn on **Hands-free** in **Settings › Interpreting**: 
 
 Turning on interpreting switches the system microphone to BlackHole 2ch, a virtual driver you can download and install with one click. With a Ling API key, you can use natural voices or clone your own voice from an 8 to 30 second recording; without a key, you can still use built-in macOS voices.
 
+Face to face, with nobody online, turn on **Read out from speakers** in **Settings › Interpreting**: hold the talk key, and the translation is read out of this Mac's speakers instead of the virtual mic. No BlackHole is needed, the system microphone isn't switched to BlackHole, the room microphone is muted while the translation plays, and Hands-free pauses. Keep it off in meetings so the translation only reaches the people online.
+
 <p align="center">
   <img src="docs/interpreting.png" width="640" alt="Interpreting settings showing the right Option talk key, target language, Ming voice previews, and macOS voices">
 </p>

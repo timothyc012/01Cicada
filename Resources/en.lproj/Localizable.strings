@@ -1539,3 +1539,12 @@
 
 /* DictationHistory */
 "听写文字未能保存到历史记录，请先复制文字。" = "Could not save dictation history. Copy the text before continuing.";
+
+/* SpeakToSpeakers */
+"从扬声器读出来" = "Read out from speakers";
+"面对面用：对方从这台 Mac 听到译文" = "Face to face: the other person hears the translation from this Mac";
+"开会时关着：译文只给线上的人听" = "Keep off in meetings: translations go only to people online";
+"从扬声器读出来时暂停" = "Paused while reading out from speakers";
+"等译文读完再按" = "Wait until the translation finishes, then press";
+"找不到扬声器" = "No speakers found";
+"找不到扬声器 · 没有读出来" = "No speakers found · not read out";

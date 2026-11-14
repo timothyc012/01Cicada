@@ -246,13 +246,19 @@ final class AppModel: ObservableObject {
         // echo (`meetingSaid`), and the running unit mutes the built-in mic for other apps (#24), which
         // then hear the virtual mic anyway. It pauses while 打开麦克风 is on: the room shares the unit and
         // is heard unprocessed, and everyone at the table would be interpreted as me.
-        handsFreeSetting = Publishers.CombineLatest4(settings.$speakHandsFree, settings.$listenSource, settings.$speakEnabled, $running)
-            .sink { [weak self] on, _, _, _ in
+        // 从扬声器读出来 has no meeting to tell its own voice from, so it keeps the talk key; with the
+        // system mic left real, a kept unit would starve other apps' input, so it is made per press.
+        handsFreeSetting = Publishers.CombineLatest(
+            Publishers.CombineLatest4(settings.$speakHandsFree, settings.$listenSource, settings.$speakEnabled, $running),
+            settings.$speakToSpeakers)
+            .sink { [weak self] values, _ in
+                let on = values.0
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         guard let self else { return }
                         self.speak.handsFree = on && self.settings.speakEnabled && !self.settings.hearsRoom && self.running
-                        self.speak.keepUnit = self.settings.speakEnabled && self.running
+                            && !self.settings.speakToSpeakers
+                        self.speak.keepUnit = self.settings.speakEnabled && self.running && !self.settings.speakToSpeakers
                         self.speak.refreshHandsFree()
                     }
                 }
@@ -555,7 +561,9 @@ final class AppModel: ObservableObject {
     /// Switching the system mic only helps when there is a call to speak into.
     var wantsSystemMic: Bool {
         // 只听会议室: no call, and the talk key only says it's for online meetings.
-        settings.speakEnabled && settings.autoSystemMic && !settings.listensToRoom && virtualMic != nil
+        // 从扬声器读出来: no call either, so the system mic is left as it is.
+        settings.speakEnabled && settings.autoSystemMic && !settings.listensToRoom && !settings.speakToSpeakers
+            && virtualMic != nil
     }
 
     func refreshSystemMic() {
@@ -1022,20 +1030,34 @@ final class AppModel: ObservableObject {
 
     /// The room mic hears silence while the talk key is down, and a moment after, so your voice
     /// doesn't come back as the room. The translation goes into the virtual mic, never the speakers,
-    /// so the room is heard again while it is translated and read out.
+    /// so the room is heard again while it is translated and read out. 从扬声器读出来 is the
+    /// exception: the room mic would hear the translation, so it stays muted while it plays.
     private func muteRoomWhileSpeaking(_ phase: SpeakEngine.Phase) {
-        if phase == .listening {
+        if Self.roomMuted(phase: phase, toSpeakers: settings.speakToSpeakers) {
             listen.setRoomMuted(true)
             roomListen.setRoomMuted(true)
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.speak.phase != .listening else { return }
+                guard let self, !Self.roomMuted(phase: self.speak.phase, toSpeakers: self.settings.speakToSpeakers) else { return }
                 self.listen.setRoomMuted(false)
                 self.roomListen.setRoomMuted(false)
             }
         }
+    }
+
+    nonisolated static func roomMuted(phase: SpeakEngine.Phase, toSpeakers: Bool) -> Bool {
+        phase == .listening || (toSpeakers && phase == .speaking)
+    }
+
+    /// 从扬声器读出来 on or off: the system mic and hands-free follow (`wantsSystemMic`, `handsFreeSetting`).
+    func setSpeakToSpeakers(_ on: Bool) {
+        settings.speakToSpeakers = on
+        speak.resetOutput()
+        applySystemMic()
+        refreshMicUsers()
+        objectWillChange.send()
     }
 
     var sourceSelection: String {

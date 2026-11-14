@@ -468,7 +468,7 @@ struct SettingsView: View {
                             .foregroundStyle(on ? Palette.accent : Palette.secondary).frame(width: 18)
                         Text(s.title).font(.system(size: 13, weight: on ? .semibold : .regular)).foregroundStyle(Palette.ink)
                         Spacer()
-                        if s == .speak && settings.speakEnabled && model.virtualMic == nil {
+                        if s == .speak && settings.speakEnabled && !settings.speakToSpeakers && model.virtualMic == nil {
                             Circle().fill(Palette.accent).frame(width: 6, height: 6)
                         }
                     }
@@ -503,16 +503,28 @@ struct SettingsView: View {
     /// is wrong. Below it, plain settings: what you say with, and which microphones.
     private var speak: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if model.virtualMic == nil {
-                SettingsCard { MicSetupCard(installer: installer, deviceName: nil) }
-            } else {
-                speakHealth
+            // Face to face there is no call: no virtual mic to install or check.
+            SettingsCard {
+                SettingsRow(title: L("从扬声器读出来"),
+                            detail: settings.speakToSpeakers ? L("面对面用：对方从这台 Mac 听到译文") : L("开会时关着：译文只给线上的人听"),
+                            divider: false) {
+                    Toggle("从扬声器读出来", isOn: Binding(get: { settings.speakToSpeakers }, set: { model.setSpeakToSpeakers($0) }))
+                        .toggleStyle(.switch).labelsHidden().controlSize(.small).tint(Palette.ink)
+                }
+            }
+            if !settings.speakToSpeakers {
+                if model.virtualMic == nil {
+                    SettingsCard { MicSetupCard(installer: installer, deviceName: nil) }
+                } else {
+                    speakHealth
+                }
             }
             group(L("说话")) {
                 SettingsRow(title: L("按住说话")) { ShortcutField(model: model, role: .talk) }
                 // Hands-free runs only while listening, and pauses with the room mic on (`AppModel.handsFreeSetting`).
                 SettingsRow(title: L("不用按键"),
                             detail: !settings.speakHandsFree ? L("开口就翻译，停顿 1 秒后说出去")
+                                : settings.speakToSpeakers ? L("从扬声器读出来时暂停")
                                 : settings.hearsRoom ? L("打开麦克风时暂停") : model.running ? L("开口就翻译，停顿 1 秒后说出去") : L("开始听会议后生效")) {
                     Toggle("不用按键", isOn: $settings.speakHandsFree)
                         .toggleStyle(.switch).labelsHidden().controlSize(.small).tint(Palette.ink)
@@ -666,23 +678,29 @@ struct SettingsView: View {
         // A chosen mic that's unplugged reads as 自动 until it's back.
         let chosen = inputs.first { $0.uid == settings.speakMic }?.name
         let auto = model.systemMic.recordingDevice?.name
+        // 从扬声器读出来: neither the system mic switch nor the virtual-mic output applies.
+        let speakers = settings.speakToSpeakers
         return group(L("麦克风")) {
-            SettingsRow(title: L("打开时把系统麦克风换成 \(virtual)")) {
-                Toggle("自动切换系统麦克风", isOn: Binding(get: { settings.autoSystemMic }, set: { model.setAutoSystemMic($0) }))
-                    .toggleStyle(.switch).labelsHidden().controlSize(.small).tint(Palette.ink)
+            if !speakers {
+                SettingsRow(title: L("打开时把系统麦克风换成 \(virtual)")) {
+                    Toggle("自动切换系统麦克风", isOn: Binding(get: { settings.autoSystemMic }, set: { model.setAutoSystemMic($0) }))
+                        .toggleStyle(.switch).labelsHidden().controlSize(.small).tint(Palette.ink)
+                }
             }
-            SettingsRow(title: L("\(appDisplayName)听你说话用")) {
+            SettingsRow(title: L("\(appDisplayName)听你说话用"), divider: !speakers) {
                 PillMenu(value: chosen ?? (auto.map { L("自动（\($0)）") } ?? L("自动")),
                          options: [("", L("自动"))] + inputs.map { ($0.uid, $0.name) }) {
                     settings.speakMic = $0
                 }
             }
-            // Only virtual mics: the translation is for the people online, never the speakers.
-            SettingsRow(title: L("译文送到"), detail: L("只给线上的人听，不从扬声器放"), divider: false) {
-                PillMenu(value: outputName,
-                         options: [("", L("虚拟麦克风（自动）"))] + model.outputs.filter(\.isVirtualMic).map { ($0.uid, $0.name) }) {
-                    settings.speakOutput = $0
-                    model.applySystemMic()
+            if !speakers {
+                // Only virtual mics: the translation is for the people online, never the speakers.
+                SettingsRow(title: L("译文送到"), detail: L("只给线上的人听，不从扬声器放"), divider: false) {
+                    PillMenu(value: outputName,
+                             options: [("", L("虚拟麦克风（自动）"))] + model.outputs.filter(\.isVirtualMic).map { ($0.uid, $0.name) }) {
+                        settings.speakOutput = $0
+                        model.applySystemMic()
+                    }
                 }
             }
         }

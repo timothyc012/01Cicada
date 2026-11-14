@@ -534,7 +534,7 @@ extension MenuPanelView {
 
     /// What the switch changes, on hover and in the one-time question.
     private var speakMicLine: String {
-        if settings.listensToRoom { return L("译文从扬声器念出来") }
+        if settings.listensToRoom || settings.speakToSpeakers { return L("译文从扬声器念出来") }
         guard let mic = model.virtualMic?.name else { return L("先装好虚拟麦克风，对方才听得到") }
         return settings.autoSystemMic ? L("系统麦克风换成 \(mic)") : L("译文送进 \(mic)")
     }
@@ -569,7 +569,8 @@ extension MenuPanelView {
                 speakQuestion
             } else if settings.speakEnabled {
                 talkCard
-                if model.lastSpeakLatency == nil, model.virtualMic != nil, !settings.listensToRoom, model.speakPhase == .idle {
+                if model.lastSpeakLatency == nil, model.virtualMic != nil, !settings.listensToRoom, !settings.speakToSpeakers,
+                   model.speakPhase == .idle {
                     Button("先试一句 →") { model.openSettings(.speak); model.speakTestShown = true }
                         .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 }
@@ -624,7 +625,7 @@ extension MenuPanelView {
             return (L("按键还需要“输入监控”权限"), L("去允许"), model.allowTalkKey)
         }
         // In 会议室 the translation is read out loud: no virtual mic, no meeting app to set up.
-        if settings.listensToRoom { return nil }
+        if settings.listensToRoom || settings.speakToSpeakers { return nil }
         if model.virtualMic == nil {
             return (L("虚拟麦克风还没装好"), L("设置"), { model.openSettings(.speak) })
         }
@@ -650,7 +651,7 @@ extension MenuPanelView {
         let hearer = model.micUsers.first { $0.state == .virtualMic }?.name
         let detail = phase == .listening ? L("松开后播出\(speakTarget)")
             : live ? L("说\(speakFrom) → \(speakTarget)")
-            : settings.listensToRoom ? L("扬声器念出\(speakTarget)")
+            : settings.listensToRoom || settings.speakToSpeakers ? L("扬声器念出\(speakTarget)")
             : hearer.map { L("对方听到 \(speakTarget) · \($0)") } ?? L("对方听到 \(speakTarget)")
         return HStack(spacing: 12) {
             TalkKeyCap(text: talkKeyName, pressed: phase == .listening, live: live)

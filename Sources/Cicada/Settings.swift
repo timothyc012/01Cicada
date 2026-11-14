@@ -52,6 +52,11 @@ final class AppSettings: ObservableObject {
     @Published var speakOutput: String {
         didSet { save() }
     }
+    /// Face to face: read the translation out of this Mac's speakers instead of a virtual mic.
+    /// Off by default, so meetings keep sending it only to the people online.
+    @Published var speakToSpeakers: Bool {
+        didSet { save() }
+    }
     /// While speaking, make the virtual mic the system default input (and put it back after).
     @Published var autoSystemMic: Bool {
         didSet { save() }
@@ -284,6 +289,7 @@ final class AppSettings: ObservableObject {
         speakHandsFree = defaults.bool(forKey: "speakHandsFree")
         speakTo = defaults.string(forKey: "speakTo") ?? "room"
         speakOutput = defaults.string(forKey: "speakOutput") ?? ""
+        speakToSpeakers = defaults.bool(forKey: "speakToSpeakers")
         autoSystemMic = defaults.object(forKey: "autoSystemMic") as? Bool ?? true
         speakMic = defaults.string(forKey: "speakMic") ?? ""
         savedSystemInput = defaults.string(forKey: "savedSystemInput") ?? ""
@@ -350,6 +356,7 @@ final class AppSettings: ObservableObject {
         defaults.set(speakHandsFree, forKey: "speakHandsFree")
         defaults.set(speakTo, forKey: "speakTo")
         defaults.set(speakOutput, forKey: "speakOutput")
+        defaults.set(speakToSpeakers, forKey: "speakToSpeakers")
         defaults.set(autoSystemMic, forKey: "autoSystemMic")
         defaults.set(speakMic, forKey: "speakMic")
         defaults.set(savedSystemInput, forKey: "savedSystemInput")
