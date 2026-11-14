@@ -2407,6 +2407,10 @@ final class AppModel: ObservableObject {
             applySystemMic()
             speak.resetOutput()
             debugLog("speak output=\(speak.outputDevice()?.name ?? "-")")
+        case "speakToSpeakers":
+            // speakToSpeakers:<on|off> is the 从扬声器读出来 switch.
+            setSpeakToSpeakers(arg != "off")
+            debugLog("speak to speakers=\(settings.speakToSpeakers) output=\(speak.outputDevice()?.name ?? "-")")
         case "voicePicker": voicePickerOpen = arg != "off"
         case "aiModels": aiModelsOpen = arg != "off"
         case "speakTestBegin": speakTester.beginTalking()

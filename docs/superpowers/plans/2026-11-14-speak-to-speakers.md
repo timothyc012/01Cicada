@@ -15,4 +15,6 @@ On:
 
 Tests: `SpeakOutputTests` covers routing on/off (including a stored speaker choice and no virtual mic) and room muting per phase. Full suite 378 pass. The local CLT needed the documented PackageDescription VFS overlay for `scripts/test.sh` and `scripts/strings.py` (0 missing keys in en/ja/ko).
 
-Not yet verified: a real press with spoken output through the speakers, the English settings UI, and whether the room mic's echo gate plus this mute fully keeps the spoken translation out of the record. These need the rebuilt app installed with the user's approval.
+Native check (dev build `d1c3aac`, debug command `speakToSpeakers:on|off`): turning it on restored the system mic from BlackHole to the MacBook mic; `state:speak` showed output MacBook Pro speakers, keepUnit false, hands-free false. A Korean `say` clip through `speakFile` was translated and logged `spoke 318 buffers to MacBook Pro 스피커`, with `room mic muted` from the start of speaking until 0.4 s after. Settings renders in Korean and English show the new row and hide the virtual-mic card and rows; off renders as before.
+
+Not yet verified: a physical right-⌥ press, and a real meeting with the room mic listening (whether any echo of the spoken translation reaches the record). During the check the user's dev preferences were found moved to the Trash at 21:32 (not by this change); they were restored with `defaults import`, and the company Gemma check passed (`reach=ok text=ok`).
