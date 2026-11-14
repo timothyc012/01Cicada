@@ -25,6 +25,13 @@ struct SpeakOutputTests {
         #expect(SpeakEngine.output(toSpeakers: true, stored: "", all: [speakers], systemOutput: nil) == nil)
     }
 
+    @Test func aPressShowsOnTheBarWhenNoNotesWindowIsUp() {
+        #expect(AppModel.speakShowsOnBar(displayMode: "bar", listening: true))
+        #expect(!AppModel.speakShowsOnBar(displayMode: "notes", listening: true))
+        #expect(AppModel.speakShowsOnBar(displayMode: "notes", listening: false))
+        #expect(!AppModel.speakShowsOnBar(displayMode: "none", listening: false))
+    }
+
     @Test func roomMicStaysMutedWhileTheSpeakersReadTheTranslation() {
         #expect(AppModel.roomMuted(phase: .listening, toSpeakers: false))
         #expect(!AppModel.roomMuted(phase: .speaking, toSpeakers: false))

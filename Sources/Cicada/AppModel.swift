@@ -370,7 +370,7 @@ final class AppModel: ObservableObject {
             // A 试一句 rehearsal shows in its own sheet: no notes window, caption or subtitle bar.
             if self.speakTester.busy { return }
             if phase == .listening && !src.isEmpty { self.heardSpeech(); self.heardWords() }
-            guard self.settings.displayMode == "bar" else {
+            guard Self.speakShowsOnBar(displayMode: self.settings.displayMode, listening: self.running) else {
                 // The notes window's caption line shows what you are saying.
                 if phase != .idle || !src.isEmpty {
                     self.liveSource = src.isEmpty ? L("你正在说…") : L("你：\(src)")
@@ -1019,7 +1019,7 @@ final class AppModel: ObservableObject {
         status = text
         debugLog("speak: notice \(text)")
         if speakTester.busy { return }
-        if settings.displayMode == "bar" {
+        if Self.speakShowsOnBar(displayMode: settings.displayMode, listening: running) {
             if !overlay.isShown { overlay.show() }
             overlay.setSpeaking(.init(phase: .idle, source: "", translation: text))
         } else if running {
@@ -1045,6 +1045,12 @@ final class AppModel: ObservableObject {
                 self.roomListen.setRoomMuted(false)
             }
         }
+    }
+
+    /// Where a press shows: the subtitle bar, or the notes window's caption line while it is up.
+    /// Not listening (face to face), the notes window isn't there, so the bar shows the press.
+    nonisolated static func speakShowsOnBar(displayMode: String, listening: Bool) -> Bool {
+        displayMode == "bar" || (displayMode == "notes" && !listening)
     }
 
     nonisolated static func roomMuted(phase: SpeakEngine.Phase, toSpeakers: Bool) -> Bool {
