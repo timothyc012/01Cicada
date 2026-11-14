@@ -180,6 +180,7 @@ final class AppModel: ObservableObject {
     @Published var speakerUndo: SpeakerUndo?
     private var speakerSetting: AnyCancellable?
     private var handsFreeSetting: AnyCancellable?
+    private var speakBarHide: DispatchWorkItem?
     var openOnboarding: (() -> Void)?
 
     var openMainWindow: (() -> Void)?
@@ -384,6 +385,7 @@ final class AppModel: ObservableObject {
             } else {
                 self.overlay.setSpeaking(.init(phase: phase, source: src, translation: dst))
             }
+            if phase == .idle { self.hideSpeakBarLater() }
         }
         speak.meetingSaid = { [weak self] text, from, to in
             let heard = EchoMatch.Heard(text: text, start: from.timeIntervalSinceReferenceDate, end: to.timeIntervalSinceReferenceDate)
@@ -1022,6 +1024,7 @@ final class AppModel: ObservableObject {
         if Self.speakShowsOnBar(displayMode: settings.displayMode, listening: running) {
             if !overlay.isShown { overlay.show() }
             overlay.setSpeaking(.init(phase: .idle, source: "", translation: text))
+            hideSpeakBarLater()
         } else if running {
             liveSource = ""
             liveTranslation = text
@@ -1045,6 +1048,21 @@ final class AppModel: ObservableObject {
                 self.roomListen.setRoomMuted(false)
             }
         }
+    }
+
+    /// The bar shown only for a press (notes mode, not listening) goes away once the press is over,
+    /// instead of tucking into the pill a meeting keeps.
+    private func hideSpeakBarLater() {
+        guard settings.displayMode == "notes", !running else { return }
+        speakBarHide?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.speak.phase == .idle, !self.running, self.settings.displayMode == "notes" else { return }
+                self.overlay.hide()
+            }
+        }
+        speakBarHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + settings.overlayHideAfter + 1, execute: work)
     }
 
     /// Where a press shows: the subtitle bar, or the notes window's caption line while it is up.
