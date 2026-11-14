@@ -44,6 +44,10 @@ struct DictationPanel: View {
                 Text(engine.message).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let historyError = engine.historyError {
+                Text(historyError).font(.system(size: 12)).foregroundStyle(Palette.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !engine.lastText.isEmpty && !engine.busy {
                 Button(L("复制上次听写")) {
                     NSPasteboard.general.clearContents()

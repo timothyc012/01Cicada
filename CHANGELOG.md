@@ -7,6 +7,8 @@ every platform (one with nothing new says No changes); earlier ones shipped only
 
 ## Unreleased
 
+Completed work dictation is kept as local text history and can be viewed in AWhisper.
+
 Mac dictation uses a nearly clear glass backdrop while keeping labels and audio levels opaque.
 
 Mac dictation now shows a glass status panel with real audio levels, elapsed time and delivery results while keeping the input field focused.

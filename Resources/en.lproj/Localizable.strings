@@ -1536,3 +1536,6 @@
 "请再说一次" = "Please try speaking again";
 "听写未完成" = "Dictation failed";
 "没有输入文字" = "No text inserted";
+
+/* DictationHistory */
+"听写文字未能保存到历史记录，请先复制文字。" = "Could not save dictation history. Copy the text before continuing.";

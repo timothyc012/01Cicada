@@ -94,6 +94,8 @@ Press `Control+Option+D` in a text field, speak, then press it again to insert y
 
 A glass status panel at the top of the screen shows preparation, real microphone levels, elapsed time, transcription and delivery without taking focus. Copied-only notices explain why and show ⌘V; missing audio and errors remain visible longer. The nearly clear glass background keeps text and audio levels fully opaque.
 
+Completed dictation is saved locally as text history, including when automatic paste is skipped. The last saved text remains available after restart. AWhisper can show these records in its history with a Cicada label; no extra voice recording is stored.
+
 Press and release once to start, then press and release again to finish; holding the shortcut does not repeatedly start and stop recording.
 
 ### Self-hosted Gemma translation and notes

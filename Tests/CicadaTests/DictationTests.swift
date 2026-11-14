@@ -115,7 +115,10 @@ extension DictationTests {
         try AVAudioFile(forWriting: url, settings: format.settings).write(from: audio)
         let old = ControlledDictationStream(), next = ControlledDictationStream()
         var calls = 0
-        let engine = DictationEngine { _ in calls += 1; return calls == 1 ? old : next }
+        let historyRoot = FileManager.default.temporaryDirectory.appendingPathComponent("history-cancel-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: historyRoot) }
+        let history = DictationHistoryStore(root: historyRoot)
+        let engine = DictationEngine(recognize: { _ in calls += 1; return calls == 1 ? old : next }, history: history)
         defer { engine.cancel() }
         var inserted: [String] = []
         engine.onComplete = { inserted.append($0); return true }
@@ -142,5 +145,43 @@ extension DictationTests {
         try await wait(.idle)
         #expect(inserted == ["new words"])
         #expect(engine.lastText == "new words")
+        #expect(try history.entries().map(\.text) == ["new words"])
+    }
+}
+
+
+extension DictationTests {
+    @MainActor @Test(arguments: [false, true]) func historyIsIndependentOfPasteAndWriteFailureDoesNotBlockDelivery(failSave: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("history-delivery-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let historyRoot = root.appendingPathComponent("records")
+        if failSave { try Data().write(to: historyRoot) }
+        let history = DictationHistoryStore(root: historyRoot)
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
+        let audio = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 32000)!
+        audio.frameLength = 32000; audio.floatChannelData![0].initialize(repeating: 0, count: 32000)
+        let file = root.appendingPathComponent("silent.wav")
+        try AVAudioFile(forWriting: file, settings: format.settings).write(from: audio)
+        let stream = ControlledDictationStream()
+        let engine = DictationEngine(recognize: { _ in stream }, history: history)
+        defer { engine.cancel() }
+        var deliveries = 0
+        engine.onComplete = { _ in deliveries += 1; return failSave }
+        engine.start(locale: "de-DE", device: nil, file: file)
+        for _ in 0..<200 { if engine.phase == .recording { break }; try await Task.sleep(for: .milliseconds(10)) }
+        #expect(engine.phase == .recording)
+        stream.say("synthetic completion")
+        for _ in 0..<100 { if engine.text == "synthetic completion" { break }; try await Task.sleep(for: .milliseconds(10)) }
+        engine.stop(); stream.releaseFinish()
+        for _ in 0..<200 { if engine.phase == .idle { break }; try await Task.sleep(for: .milliseconds(10)) }
+        #expect(engine.phase == .idle); #expect(deliveries == 1); #expect(engine.lastText == "synthetic completion")
+        if failSave {
+            #expect(engine.historyError != nil); #expect(engine.outcome == .inserted)
+        } else {
+            let entries = try history.entries()
+            #expect(entries.count == 1); #expect(entries.first?.language == "de-DE")
+            #expect(entries.first?.text == "synthetic completion"); #expect(engine.historyError == nil)
+        }
     }
 }

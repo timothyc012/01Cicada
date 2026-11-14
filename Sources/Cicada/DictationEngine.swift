@@ -67,6 +67,9 @@ struct DictationTranscript {
     @Published private(set) var text = ""
     @Published private(set) var lastText = ""
     @Published var message = ""
+    private(set) var historyError: String?
+    private let history: DictationHistoryStore?
+    private var historyLanguage = ""
     private(set) var outcome: DictationOutcome?
     private(set) var runID = 0
     var onComplete: ((String) -> Bool)?
@@ -91,21 +94,24 @@ struct DictationTranscript {
 
     private let recognize: @MainActor (String) async throws -> RecognitionStream
 
-    init(recognize: @escaping @MainActor (String) async throws -> RecognitionStream) {
+    init(recognize: @escaping @MainActor (String) async throws -> RecognitionStream, history: DictationHistoryStore? = nil) {
         self.recognize = recognize
+        self.history = history
+        self.lastText = (try? history?.entries().first?.text) ?? ""
     }
     convenience init() {
-        self.init { locale in
+        self.init(recognize: { locale in
             guard await Recognition.authorize() else { throw Recognition.notAllowed }
             try await Recognition.install(locale) { _ in }
             return try await Recognition.start(locale, drafts: true, speaking: false)
-        }
+        }, history: DictationHistoryStore())
     }
 
     func start(locale: String, device: OutputDevice?, file: URL? = nil) {
         guard !busy else { return }
         destination = DictationPaste()
         lastDeliveryDiagnostics = [:]
+        historyError = nil; historyLanguage = locale
         let token = run.begin()
         currentToken = token
         runID += 1
@@ -206,6 +212,11 @@ struct DictationTranscript {
                 self.lastDeliveryDiagnostics = ["reason": "empty_transcript"]
             }
             else {
+                do { try self.history?.append(text: result, language: self.historyLanguage) }
+                catch {
+                    self.historyError = L("听写文字未能保存到历史记录，请先复制文字。")
+                    debugLog("dictation history: save failed: \(error.localizedDescription)")
+                }
                 let pasted = self.onComplete?(result) ?? self.destination?.deliver(result) ?? false
                 self.lastDeliveryDiagnostics = self.destination?.diagnostics ?? ["reason": "destination_missing"]
                 self.message = pasted ? L("已输入") : L("已复制，请粘贴到输入框")
