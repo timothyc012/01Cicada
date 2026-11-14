@@ -1327,7 +1327,7 @@ final class AppModel: ObservableObject {
         }
         // Takes effect from the next meeting: one already running keeps how it listens, except that
         // its audio never goes on to a service other than the one hearing it (`aiServiceChanged`).
-        Recognition.serverPreferred = c.transcribes
+        Recognition.serverPreferred = c.transcribes && settings.aiCustomRecognize
         translator.googleOff = c.provider.id == .custom && settings.aiCustomOnly
         ling.reconfigure()
         listen.aiServiceChanged()
@@ -2376,6 +2376,7 @@ final class AppModel: ObservableObject {
         case "aiCustomHearModel": settings.aiCustomHearModel = arg; applyAIService()
         case "aiCustomHearBase": settings.aiCustomHearBase = arg; applyAIService()
         case "aiCustomRecognize": settings.aiCustomRecognize = arg == "on"; applyAIService()
+        case "aiCustomRecognizeMissing": settings.aiCustomRecognizeMissing = arg == "on"; applyAIService()
         case "aiCustomOnly": settings.aiCustomOnly = arg == "on"; applyAIService()
         case "subtitles": setSubtitles(arg)
         case "meetingSubtitles": setSubtitles(arg, meetingOnly: true)

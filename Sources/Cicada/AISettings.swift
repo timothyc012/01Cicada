@@ -402,26 +402,31 @@ struct AISettingsView: View {
     @ViewBuilder private var hearSection: some View {
         let c = settings.aiConfig
         let own = settings.aiCustomRecognize
+        let missing = !own && settings.aiCustomRecognizeMissing
         let hearModel = settings.aiCustomHearModel
         let host = (settings.aiCustomHearBase.isEmpty ? c.base : AIProvider.customBase(settings.aiCustomHearBase))?.host ?? textHost
         let hear = ling.aiCheck.hear
         HStack(spacing: 10) {
-            Circle().fill(!own ? Palette.ok : hear?.ok == true ? Palette.ok : hear == nil ? Color(white: 0.75) : Palette.error)
+            Circle().fill(!own && !missing ? Palette.ok : hear?.ok == true ? Palette.ok : hear == nil ? Color(white: 0.75) : Palette.error)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text("语音识别").font(.system(size: 13)).foregroundStyle(Palette.ink)
-                Text(own ? L("会议的声音会发到 \(host)；连不上时用本机") : L("更快，不花钱，声音不出这台 Mac"))
+                Text(own ? L("会议的声音会发到 \(host)；连不上时用本机")
+                     : missing ? L("本机听不懂的语言（如俄语）发到 \(host)，其余留在本机")
+                     : L("更快，不花钱，声音不出这台 Mac"))
                     .font(.system(size: 11)).foregroundStyle(Palette.tertiary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Segments(options: [("mac", L("本机")), ("own", L("自建服务"))], value: own ? "own" : "mac") {
+            Segments(options: [("mac", L("本机")), ("missing", L("本机听不懂时")), ("own", L("自建服务"))],
+                     value: own ? "own" : missing ? "missing" : "mac") {
                 settings.aiCustomRecognize = $0 == "own"
-                if $0 == "own" { open.insert("hear") }
+                settings.aiCustomRecognizeMissing = $0 == "missing"
+                if $0 != "mac" { open.insert("hear") }
                 model.applyAIService()
             }
         }
         .padding(.horizontal, 16).frame(minHeight: 52)
-        if own {
+        if own || missing {
             VStack(alignment: .leading, spacing: 8) {
                 Text("需支持 /audio/transcriptions，例如 Qwen3-ASR、Whisper。下一场会议起生效。")
                     .font(.system(size: 11)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
@@ -822,7 +827,9 @@ struct AISettingsView: View {
             let nearby = settings.aiConfig.base.map { AIProvider.isNearby($0.absoluteString) } ?? false
             let cost = nearby ? L("跑在你自己的机器上，不按量计费。") : L("费用以这个服务为准。")
             if settings.aiCustomOnly { return cost + L("会议的语音和文字只发给 \(customHosts)，不经过 Google 等外部服务。") }
-            return cost + (settings.aiConfig.transcribes ? L("会议的声音会发给你的服务识别。") : L("发出去的只有文字，语音识别留在本机。"))
+            return cost + (!settings.aiConfig.transcribes ? L("发出去的只有文字，语音识别留在本机。")
+                : settings.aiCustomRecognize ? L("会议的声音会发给你的服务识别。")
+                : L("本机听不懂的语言，声音会发给你的服务识别。"))
         default: return L("按所选模型计费。发出去的只有文字，语音识别留在本机。")
         }
     }

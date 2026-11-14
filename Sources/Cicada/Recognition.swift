@@ -31,6 +31,11 @@ enum Recognition {
     /// stay ready, and listening falls back to them when the service stops answering.
     nonisolated(unsafe) static var serverPreferred = false
 
+    /// Languages this Mac's speech models don't hear (SpeechTranscriber on macOS 26 has no Russian):
+    /// picked under 听到, they are heard by the user's own speech service when one is set up.
+    static let serverOnlyLocales: Set<String> = ["ru-RU"]
+    static func needsServer(_ locale: String) -> Bool { serverOnlyLocales.contains(locale) }
+
     /// `cloudOnly`: what the service heard in one stretch of `locale` (nil: any language), set by the
     /// app. The live meeting goes through `ListenEngine.startCloud`; this serves imports and clips.
     nonisolated(unsafe) static var cloudHear: (@MainActor @Sendable (_ wav: Data, _ seconds: Double, _ locale: String?) async -> CloudHeard?)?

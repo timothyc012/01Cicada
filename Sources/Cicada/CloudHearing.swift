@@ -100,6 +100,8 @@ enum CloudHearing {
             if scalars.contains(where: { (0x3040...0x30FF).contains($0.value) }) { code = "ja" }
             else if scalars.contains(where: { (0xAC00...0xD7AF).contains($0.value) }) { code = "ko" }
             else if scalars.contains(where: { (0x4E00...0x9FFF).contains($0.value) }) { code = hint?.hasPrefix("zh") == true ? hint! : "zh-CN" }
+            // A Whisper server's plain JSON names no language: Cyrillic is taken as Russian.
+            else if scalars.contains(where: { (0x0400...0x04FF).contains($0.value) }) { code = "ru" }
             else { code = hint.map { $0.hasPrefix("zh") || $0 == "ja" || $0 == "ko" ? "en" : $0 } ?? "en" }
         }
         return CloudHeard(lang: code, original: o, translation: code == target ? o : nil)

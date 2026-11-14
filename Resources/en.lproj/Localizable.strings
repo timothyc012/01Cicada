@@ -1548,3 +1548,8 @@
 "等译文读完再按" = "Wait until the translation finishes, then press";
 "找不到扬声器" = "No speakers found";
 "找不到扬声器 · 没有读出来" = "No speakers found · not read out";
+
+/* Russian via your speech service */
+"本机听不懂时" = "When this Mac can't";
+"本机听不懂的语言（如俄语）发到 %@，其余留在本机" = "Languages this Mac can't hear (like Russian) go to %@; the rest stays here";
+"本机听不懂的语言，声音会发给你的服务识别。" = "Languages this Mac can't hear are sent to your service for recognition.";

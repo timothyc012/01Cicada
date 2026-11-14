@@ -20,6 +20,8 @@ let sourceLanguages: [Lang] = [
     .init(name: "Français", locale: "fr-FR", code: "fr"),
     .init(name: "Deutsch", locale: "de-DE", code: "de"),
     .init(name: "Português", locale: "pt-BR", code: "pt"),
+    // Not on this Mac's speech models: heard by your own speech service (`Recognition.needsServer`).
+    .init(name: "Русский", locale: "ru-RU", code: "ru"),
 ]
 
 let targetLanguages: [Lang] = [
@@ -32,6 +34,7 @@ let targetLanguages: [Lang] = [
     .init(name: "Français", locale: "fr", code: "fr"),
     .init(name: "Deutsch", locale: "de", code: "de"),
     .init(name: "Português", locale: "pt", code: "pt"),
+    .init(name: "Русский", locale: "ru", code: "ru"),
 ]
 
 /// Maps a system language identifier ("zh-Hans-CA", "en-CA", "zh-TW") to a translation code.

@@ -108,9 +108,18 @@ final class ListenEngine {
     var cloudListening: Bool { cloud != nil }
     /// The user's own service stopped answering in this meeting: listening went back to this Mac.
     private var serverFellBack = false
-    /// The meeting is recognized by the user's own service (`Recognition.serverPreferred`).
+    /// The meeting is recognized by the user's own service (`Recognition.serverPreferred`), or the
+    /// language picked under 听到 has no model on this Mac (`Recognition.needsServer`).
     var serverHears: Bool {
-        Recognition.serverPreferred && !serverFellBack && translator?.ling.transcribes == true
+        guard !serverFellBack, translator?.ling.transcribes == true else { return false }
+        if case .fixed(let lang) = sourceMode {
+            return Self.serverHears(preferred: Recognition.serverPreferred, fixedLocale: lang.locale)
+        }
+        return Self.serverHears(preferred: Recognition.serverPreferred, fixedLocale: nil)
+    }
+
+    nonisolated static func serverHears(preferred: Bool, fixedLocale: String?) -> Bool {
+        preferred || fixedLocale.map(Recognition.needsServer) == true
     }
     /// Back on this Mac after the service listened (its name), shown for a few seconds.
     private(set) var cloudBack: (name: String, at: Date)?

@@ -158,6 +158,11 @@ final class AppSettings: ObservableObject {
     @Published var aiCustomRecognize: Bool {
         didSet { save() }
     }
+    /// 本机听不懂的语言: the speech model hears only a language this Mac has no model for (Russian),
+    /// picked under 听到; everything else stays on this Mac. Ignored while `aiCustomRecognize` is on.
+    @Published var aiCustomRecognizeMissing: Bool {
+        didSet { save() }
+    }
     /// The custom service's notes: 另一个服务 (its own address, empty: the same one, and its own key
     /// in the `custom-notes` key file). Off keeps the address, so switching back and forth loses
     /// nothing. The notes model is `aiModels["custom.notes"]` (empty: the translation model).
@@ -188,7 +193,7 @@ final class AppSettings: ObservableObject {
             let name = aiCustomVoice.trimmingCharacters(in: .whitespaces)
             let hear = aiCustomHearModel.trimmingCharacters(in: .whitespaces)
             let hearBase = aiCustomHearBase.isEmpty ? base : AIProvider.customBase(aiCustomHearBase)
-            let recognizes = aiCustomRecognize && !hear.isEmpty
+            let recognizes = (aiCustomRecognize || aiCustomRecognizeMissing) && !hear.isEmpty
             let textModel = aiModels["custom"] ?? ""
             let notesModel = (aiModels["custom.notes"] ?? "").trimmingCharacters(in: .whitespaces)
             let notesAddress = aiCustomNotesOwn ? aiCustomNotesBase.trimmingCharacters(in: .whitespaces) : ""
@@ -316,6 +321,7 @@ final class AppSettings: ObservableObject {
         aiCustomHearModel = defaults.string(forKey: "aiCustomHearModel") ?? ""
         aiCustomHearBase = defaults.string(forKey: "aiCustomHearBase") ?? ""
         aiCustomRecognize = defaults.bool(forKey: "aiCustomRecognize")
+        aiCustomRecognizeMissing = defaults.bool(forKey: "aiCustomRecognizeMissing")
         aiCustomOnly = defaults.bool(forKey: "aiCustomOnly")
         aiCustomNotesOwn = defaults.bool(forKey: "aiCustomNotesOwn")
         aiCustomNotesBase = defaults.string(forKey: "aiCustomNotesBase") ?? ""
@@ -382,6 +388,7 @@ final class AppSettings: ObservableObject {
         defaults.set(aiCustomHearModel, forKey: "aiCustomHearModel")
         defaults.set(aiCustomHearBase, forKey: "aiCustomHearBase")
         defaults.set(aiCustomRecognize, forKey: "aiCustomRecognize")
+        defaults.set(aiCustomRecognizeMissing, forKey: "aiCustomRecognizeMissing")
         defaults.set(aiCustomOnly, forKey: "aiCustomOnly")
         defaults.set(aiCustomNotesOwn, forKey: "aiCustomNotesOwn")
         defaults.set(aiCustomNotesBase, forKey: "aiCustomNotesBase")
