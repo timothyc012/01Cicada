@@ -189,3 +189,25 @@ extension DictationTests {
         }
     }
 }
+
+
+extension DictationTests {
+    @MainActor @Test func emptyAttemptKeepsThePreviousSuccessfulTextAvailable() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("history-empty-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = DictationHistoryStore(root: root); _ = try history.append(text: "previous successful words", language: "en-US")
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
+        let audio = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 32000)!
+        audio.frameLength = 32000; audio.floatChannelData![0].initialize(repeating: 0, count: 32000)
+        let file = root.appendingPathComponent("silent.wav"); try AVAudioFile(forWriting: file, settings: format.settings).write(from: audio)
+        let stream = ControlledDictationStream(); let engine = DictationEngine(recognize: { _ in stream }, history: history)
+        defer { engine.cancel() }
+        var deliveries = 0; engine.onComplete = { _ in deliveries += 1; return false }
+        engine.start(locale: "en-US", device: nil, file: file)
+        for _ in 0..<200 { if engine.phase == .recording { break }; try await Task.sleep(for: .milliseconds(10)) }
+        engine.stop(); stream.releaseFinish()
+        for _ in 0..<200 { if engine.phase == .idle { break }; try await Task.sleep(for: .milliseconds(10)) }
+        #expect(engine.phase == .idle); #expect(deliveries == 0)
+        #expect(engine.lastText == "previous successful words"); #expect(try history.entries().count == 1)
+    }
+}

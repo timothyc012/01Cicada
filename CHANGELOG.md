@@ -7,6 +7,8 @@ every platform (one with nothing new says No changes); earlier ones shipped only
 
 ## Unreleased
 
+Search and copy completed dictations from Dictation History in Cicada. Empty attempts keep the last successful text available.
+
 Completed work dictation is kept as local text history and can be viewed in AWhisper.
 
 Mac dictation uses a nearly clear glass backdrop while keeping labels and audio levels opaque.

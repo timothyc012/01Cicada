@@ -1,4 +1,6 @@
 <p align="center">
+
+Open Dictation History beside the dictation settings or from File to search and copy completed dictations. Empty attempts keep the last successful text available.
   <img src="docs/icon.png" width="128" height="128" alt="Cicada icon">
 </p>
 

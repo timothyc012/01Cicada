@@ -37,6 +37,7 @@ final class AppMenu: NSObject, NSMenuItemValidation {
         file.addItem(item(L("停止转写"), #selector(stopImport)))
         file.addItem(.separator())
         file.addItem(item(L("会议记录"), #selector(openRecords)))
+        file.addItem(item(L("听写历史"), #selector(openDictationHistory)))
         add(file, to: main)
 
         let notes = NSMenu(title: L("纪要"))
@@ -194,6 +195,7 @@ final class AppMenu: NSObject, NSMenuItemValidation {
     @objc private func openSettings() { model?.openSettings() }
     @objc private func openAI() { model?.openSettings(.ai) }
     @objc private func openRecords() { showMainWindow() }
+    @objc private func openDictationHistory() { model?.dictationHistoryWindow.show() }
     @objc private func onboarding() { showOnboarding() }
     @objc private func importFiles() { model?.chooseImportFiles() }
     @objc private func stopImport() { model?.importer.cancelAll() }

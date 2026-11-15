@@ -202,7 +202,6 @@ struct DictationTranscript {
             timeout.cancel()
             guard self.run.accepts(token) else { return }
             let result = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.lastText = result
             self.phase = .idle
             self.run.cancel()
             self.stream = nil; self.reader = nil
@@ -212,6 +211,7 @@ struct DictationTranscript {
                 self.lastDeliveryDiagnostics = ["reason": "empty_transcript"]
             }
             else {
+                self.lastText = result
                 do { try self.history?.append(text: result, language: self.historyLanguage) }
                 catch {
                     self.historyError = L("听写文字未能保存到历史记录，请先复制文字。")

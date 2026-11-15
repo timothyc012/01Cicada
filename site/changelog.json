@@ -1,5 +1,22 @@
 [
   {
+    "version": "Unreleased",
+    "date": "2026-11-15",
+    "title": "听写历史",
+    "summary": "在知了里找回并复制听写文字。",
+    "image": null,
+    "items": [
+      {
+        "kind": "new",
+        "platforms": [
+          "mac"
+        ],
+        "title": "听写历史可以搜索、复制已完成的文字。",
+        "text": "从听写面板或文件菜单打开；没有识别到文字时，仍保留上次成功的内容。"
+      }
+    ]
+  },
+  {
     "version": "1.10.1",
     "date": "2026-11-14",
     "title": "Windows 听电脑声音更稳了",
