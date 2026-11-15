@@ -20,6 +20,10 @@ final class LiveFixes: ObservableObject {
     let settings: FixSwitches
     /// The line changed: the app refreshes the subtitle bar if it is still showing it.
     var onLineFixed: ((_ session: String, _ line: TranscriptLine) -> Void)?
+    /// The user rewrote the line's words (改这句…, 改回, or 撤销 of either): its translation is of the old
+    /// words, so the app translates it again. Not for the service's own fixes, which ride along
+    /// with the translation they came from.
+    var onLineRewritten: ((_ session: String, _ line: TranscriptLine) -> Void)?
     var onChange: (() -> Void)?
 
     /// The last thing the user did, said back with 撤销 for a few seconds.
@@ -198,6 +202,7 @@ final class LiveFixes: ObservableObject {
         fixes[k].ask = nil
         fixes[k].user = nil
         set(fixes, line: lineID, in: id)
+        rewritten(l, in: id)
         let c = Correction.core(fix.from, fix.to)
         refused.insert(Self.pair(c.from, c.to))
         refused.insert(Self.pair(fix.from, fix.to))
@@ -237,6 +242,7 @@ final class LiveFixes: ObservableObject {
                 return f
             }
             set(fixes + [e.fix], line: t.id, in: id)
+            rewritten(t, in: id)
         }
         let c = Correction.core(e.fix.from, e.fix.to)
         // Only a change made everywhere teaches the word list (a one-off must not), and only a
@@ -251,6 +257,12 @@ final class LiveFixes: ObservableObject {
         say(learned ? L("已改 \(targets.count) 处：\(a) → \(b)，记进词表")
                     : L("已改 \(targets.count) 处：\(a) → \(b)"))
         return targets.count
+    }
+
+    /// `before` is the line as it was: only words that now read differently are worth a new translation.
+    private func rewritten(_ before: TranscriptLine, in id: String) {
+        guard let now = store.session(id)?.lines.first(where: { $0.id == before.id }), now.shown != before.shown else { return }
+        onLineRewritten?(id, now)
     }
 
     // MARK: 撤销
@@ -268,8 +280,10 @@ final class LiveFixes: ObservableObject {
     func undo() {
         guard let step = undoStack.popLast() else { return }
         for (lid, fixes) in step.lines {
+            let before = store.session(step.session)?.lines.first { $0.id == lid }
             store.setFixes(in: step.session, lineID: lid, fixes)
             if let now = store.session(step.session)?.lines.first(where: { $0.id == lid }) { onLineFixed?(step.session, now) }
+            if let before { rewritten(before, in: step.session) }
         }
         vocabulary.restore(step.words)
         refused = step.refused

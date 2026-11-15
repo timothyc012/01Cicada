@@ -57,6 +57,34 @@ import Testing
         #expect(!fx.vocabulary.knows(heard: "木娜", word: "Monad"))
     }
 
+    @Test func rewritingLinesAsksForTheirTranslationAgain() {
+        let (fx, store, id) = setup(["我木娜找了一个", "木娜那边也有", "别的"])
+        var rewritten: [String] = []
+        fx.onLineRewritten = { _, l in rewritten.append("\(l.id)=\(l.shown)") }
+        fx.edit(lineID: "l0", in: id, to: "我Monad找了一个", everywhere: true, remember: true)
+        #expect(rewritten == ["l0=我Monad找了一个", "l1=Monad那边也有"])
+        // 撤销 puts the old words back: their translation follows them.
+        rewritten = []
+        fx.undo()
+        #expect(Set(rewritten) == ["l0=我木娜找了一个", "l1=木娜那边也有"])
+        #expect(line(store, id, "l2").shown == "别的")
+        // 改回 on a line is a rewrite too.
+        fx.edit(lineID: "l0", in: id, to: "我Monad找了一个", everywhere: false, remember: false)
+        rewritten = []
+        fx.revert(line(store, id, "l0").fixes!.last!, lineID: "l0", in: id)
+        #expect(rewritten == ["l0=我木娜找了一个"])
+    }
+
+    @Test func theServicesOwnFixIsNotARewrite() {
+        let (fx, store, id) = setup(["最近那个开布特提了"])
+        var rewritten = 0
+        fx.onLineRewritten = { _, _ in rewritten += 1 }
+        fx.received("最近那个开布特提了", [.init(from: "开布特", to: "Curve", confidence: 0.9)])
+        if let asked = fx.pending(in: id).first { fx.answer(asked.fix, yes: true, in: id) }
+        #expect(line(store, id, "l0").shown == "最近那个Curve提了")
+        #expect(rewritten == 0)
+    }
+
     @Test func oneOffEditDoesNotTeachTheList() {
         let (fx, store, id) = setup(["我木娜找了一个", "木娜那边也有"])
         fx.edit(lineID: "l0", in: id, to: "我Monad找了一个", everywhere: false, remember: true)

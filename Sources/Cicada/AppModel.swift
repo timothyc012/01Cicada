@@ -315,6 +315,7 @@ final class AppModel: ObservableObject {
         translator.fixContext = { [weak self] text in self?.fixes.context(for: text) }
         translator.onFixes = { [weak self] text, edits in self?.fixes.received(text, edits) }
         fixes.onLineFixed = { [weak self] id, line in self?.lineFixed(id, line) }
+        fixes.onLineRewritten = { [weak self] id, line in self?.retranslate(id, line) }
         fixes.onChange = { [weak self] in self?.objectWillChange.send() }
         // An Intel Mac's imports: heard at a lower priority than the live meeting.
         Recognition.cloudHear = { [weak self] wav, seconds, locale in
@@ -1609,6 +1610,23 @@ final class AppModel: ObservableObject {
         guard session == store.liveID, let seg = lineForSegment.first(where: { $0.value == line.id })?.key else { return }
         let engine = line.via == "room" && roomListen.isRunning ? roomListen : listen
         engine.showFixed(seg, text: line.shown)
+    }
+
+    /// The user rewrote a line in the record: its translation follows the words as they now read,
+    /// in a meeting still going or one long over. A line kept in the original only stays that way.
+    private func retranslate(_ session: String, _ line: TranscriptLine) {
+        guard line.dst != nil, line.srcLang != line.dstLang else { return }
+        let text = line.shown
+        // The live chain's own translation of what was first heard must not land on top of it.
+        if session == store.liveID { refinedLines.insert(line.id) }
+        Task { [weak self] in
+            guard let self, let out = await self.translator.translate(text, source: line.srcLang, target: line.dstLang,
+                                                                                kind: .file, fixing: false) else { return }
+            // Rewritten again (or undone) meanwhile: that rewrite's translation is the one to keep.
+            guard self.store.session(session)?.lines.first(where: { $0.id == line.id })?.shown == text else { return }
+            self.store.setTranslation(in: session, lineID: line.id, out)
+            contentLog("RETRANSLATE \(line.id): \(text) => \(out)")
+        }
     }
 
     private func translated(_ segID: Int, _ text: String) {

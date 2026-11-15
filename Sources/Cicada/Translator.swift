@@ -175,7 +175,10 @@ final class TranslationService {
     /// diagnostics can count them without a line per refresh.
     var onDraft: ((Double, Bool) -> Void)?
 
-    func translate(_ text: String, source: String, target: String, kind: Kind, trace: TranslateTrace? = nil) async -> String? {
+    /// `fixing: false` for words the user wrote themselves (改这句…): translated as they stand, since
+    /// asking for misheard words would let the service "fix" the user's own spelling back.
+    func translate(_ text: String, source: String, target: String, kind: Kind, trace: TranslateTrace? = nil,
+                   fixing: Bool = true) async -> String? {
         if source == target { return text }
         // Partial text only ever goes to Google: left out, it shows the original until the sentence ends.
         if kind == .draft, googleOff { return nil }
@@ -185,12 +188,13 @@ final class TranslationService {
             onDraft(Date().timeIntervalSince(started), out != nil)
             return out
         }
-        let out = await chain(text, source: source, target: target, kind: kind, trace: trace)
+        let out = await chain(text, source: source, target: target, kind: kind, trace: trace, fixing: fixing)
         if kind == .sentence { health.sentencesUntranslated = out == nil }
         return out
     }
 
-    private func chain(_ text: String, source: String, target: String, kind: Kind, trace: TranslateTrace?) async -> String? {
+    private func chain(_ text: String, source: String, target: String, kind: Kind, trace: TranslateTrace?,
+                       fixing: Bool = true) async -> String? {
         if kind == .sentence, failNext > 0 {
             failNext -= 1
             trace?.attempts.append(.init(provider: ling.provider.id.rawValue, seconds: 0, failure: "simulated"))
@@ -198,7 +202,7 @@ final class TranslationService {
         }
         if kind != .draft, ling.usable, lingWorthTrying() {
             let started = Date()
-            let (out, failure) = await viaLing(text, source: source, target: target, kind: kind, trace: trace)
+            let (out, failure) = await viaLing(text, source: source, target: target, kind: kind, trace: trace, fixing: fixing)
             trace?.attempts.append(.init(provider: ling.provider.id.rawValue, seconds: Date().timeIntervalSince(started),
                                          failure: out == nil ? failure : nil))
             if let out {
@@ -243,9 +247,9 @@ final class TranslationService {
     }
 
     private func viaLing(_ text: String, source: String, target: String, kind: Kind,
-                         trace: TranslateTrace?) async -> (String?, String) {
+                         trace: TranslateTrace?, fixing: Bool = true) async -> (String?, String) {
         let from = source == "auto" ? "the spoken language" : Self.englishName(source)
-        if kind == .sentence || kind == .file, let ctx = fixContext?(text) {
+        if fixing, kind == .sentence || kind == .file, let ctx = fixContext?(text) {
             return await viaLingFixing(text, from: from, target: target, kind: kind, ctx: ctx, trace: trace)
         }
         var prompt = """
