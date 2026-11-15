@@ -1,4 +1,6 @@
 <p align="center">
+
+在听写设置旁或“文件 › 听写历史”里搜索、复制已完成的听写；没有识别到文字时仍保留上次成功的内容。
   <img src="docs/icon.png" width="128" height="128" alt="知了图标">
 </p>
 

@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     let dictationKey = HotKey(id: 3, shortcut: .defaultDictation)
     let dictation = DictationEngine()
     let dictationHUD = DictationHUDController()
+    lazy var dictationHistoryWindow = DictationHistoryWindowController()
     @Published var dictating = false
     @Published var dictationKeyTaken = false
     private(set) var dictationShortcutPresses = 0
@@ -466,6 +467,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             self.dictating = self.dictation.busy
             self.dictationHUD.update(engine: self.dictation, shortcut: self.settings.dictationKey)
+            if self.dictation.phase == .idle { self.dictationHistoryWindow.refreshIfVisible() }
             self.objectWillChange.send()
         }
         dictationKey.onDown = { [weak self] in
@@ -2103,6 +2105,19 @@ final class AppModel: ObservableObject {
         case "dictateLanguage":
             if sourceLanguages.contains(where: { $0.locale == arg }) { settings.dictationLanguage = arg }
             else { debugFail("Unsupported dictation language") }
+        case "dictationHistory":
+            dictationHistoryWindow.show()
+            DebugRun.reply?.data = ["visible": dictationHistoryWindow.window?.isVisible == true,
+                                    "count": dictationHistoryWindow.model.entries.count,
+                                    "readError": dictationHistoryWindow.model.errorMessage != nil] as [String: Any]
+        case "dictationHistoryRender":
+            dictationHistoryWindow.model.reload()
+            let r = ImageRenderer(content: DictationHistoryView(model: dictationHistoryWindow.model).frame(width: 720, height: 480))
+            r.scale = 2
+            guard let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { return debugFail("history: render failed") }
+            do { try png.write(to: URL(fileURLWithPath: arg)) }
+            catch { return debugFail("history: image write failed") }
         case "dictateState":
             DebugRun.reply?.data = ["phase": String(describing: dictation.phase), "text": dictation.text,
                                     "lastText": dictation.lastText, "message": dictation.message,
@@ -2781,6 +2796,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         menu.install()
         setupStatusItem()
         model.openMainWindow = { [weak self] in self?.showMainWindow() }
+        model.dictationHistoryWindow.visibilityChanged = { [weak self] closing in self?.updateActivationPolicy(closing: closing) }
         model.openSettingsWindow = { [weak self] in self?.showSettingsWindow() }
         model.showPanel = { [weak self] in self?.togglePopover() }
         model.openPanel = { [weak self] in if self?.popover.isShown == false { self?.togglePopover() } }
@@ -3033,7 +3049,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     /// The notes window doesn't count: it floats beside the meeting app and never takes focus from
     /// it (a regular app doesn't change that: the panel is non-activating either way).
     func updateActivationPolicy(closing: NSWindow? = nil) {
-        let open = [mainWindow, onboardingWindow, settingsWindow].contains { $0 != nil && $0 != closing && $0!.isVisible }
+        let open = [mainWindow, onboardingWindow, settingsWindow, model.dictationHistoryWindow.window].contains { $0 != nil && $0 != closing && $0!.isVisible }
         let policy: NSApplication.ActivationPolicy = open || model.settings.showInDock ? .regular : .accessory
         guard NSApp.activationPolicy() != policy else { return }
         NSApp.setActivationPolicy(policy)

@@ -1630,3 +1630,14 @@
 "标记这个人叫什么" = "Name this person";
 "标记人名…" = "Name…";
 "记住这个声音…" = "Remember This Voice…";
+
+/* Native dictation history */
+"听写历史" = "Dictation History";
+"%lld 条听写" = "%lld dictations";
+"刷新记录" = "Refresh";
+"搜索听写文字" = "Search dictation text";
+"还没有听写记录" = "No dictations yet";
+"没有找到匹配的听写" = "No matching dictations";
+"成功识别的听写会保存在这里；没有文字的尝试不会保存。" = "Completed dictations appear here. Attempts without recognized text are not saved.";
+"无法读取听写历史，请稍后刷新。" = "Could not read dictation history. Try refreshing.";
+"复制失败，请选中文字后重试。" = "Could not copy. Select the text and try again.";

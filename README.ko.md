@@ -1,4 +1,6 @@
 <p align="center">
+
+받아쓰기 설정 옆이나 파일 메뉴의 받아쓰기 기록에서 인식된 내용을 검색하고 복사할 수 있습니다. 글이 인식되지 않아도 이전에 성공한 문장은 유지됩니다.
   <img src="docs/icon.png" width="128" height="128" alt="Cicada 아이콘">
 </p>
 

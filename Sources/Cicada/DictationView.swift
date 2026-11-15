@@ -21,6 +21,8 @@ struct DictationPanel: View {
             HStack {
                 Label(L("听写输入"), systemImage: "keyboard").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
                 Spacer()
+                Button(L("听写历史")) { model.dictationHistoryWindow.show() }.buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 Button(L("设置")) { model.openSettings(.dictation) }.buttonStyle(.plain)
                     .font(.system(size: 12)).foregroundStyle(Palette.secondary)
             }
