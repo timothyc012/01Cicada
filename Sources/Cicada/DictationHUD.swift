@@ -41,12 +41,16 @@ struct DictationHUDState {
 }
 
 private struct DictationHUDCopy {
-    let title: String
-    let detail: String
+    private(set) var title: String
+    private(set) var detail: String
     let symbol: String
     let badge: String
-    init(status: DictationHUDState.Status, shortcut: String, elapsed: Int, silent: Bool) {
+    /// Whether `detail` holds what was heard, which is cut at its start so the newest words stay in view.
+    let showsText: Bool
+    init(status: DictationHUDState.Status, shortcut: String, elapsed: Int, silent: Bool, text: String = "") {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
         badge = status == .recording ? String(format: "%02d:%02d", elapsed / 60, elapsed % 60) : ""
+        var heard = false
         switch status {
         case .hidden: title = ""; detail = ""; symbol = ""
         case .preparing:
@@ -54,10 +58,14 @@ private struct DictationHUDCopy {
         case .recording:
             title = L("正在听写"); symbol = "waveform"
             detail = silent ? L("暂时没有声音，请检查麦克风") : L("再按 \(shortcut) 完成")
+            // What is heard so far, so you see it working; the shortcut hint is in the title then.
+            if !silent, !text.isEmpty { title = L("再按 \(shortcut) 完成"); detail = text; heard = true }
         case .finishing:
             title = L("正在转成文字"); detail = L("请稍等片刻"); symbol = "ellipsis"
+            if !text.isEmpty { detail = text; heard = true }
         case .result(.inserted):
             title = L("已输入"); detail = L("文字已发送到原来的输入框"); symbol = "checkmark"
+            if !text.isEmpty { detail = text; heard = true }
         case .result(.copied(let reason)):
             title = L("已复制"); symbol = "doc.on.doc"
             switch reason {
@@ -66,6 +74,8 @@ private struct DictationHUDCopy {
             case "no_destination_app", "destination_missing": detail = L("没有可用的输入框 · 按 ⌘V 粘贴")
             default: detail = L("未能自动输入 · 按 ⌘V 粘贴")
             }
+            // Not typed in: what was heard goes under why, so you know what ⌘V will paste.
+            if !text.isEmpty { title = detail; detail = text; heard = true }
         case .result(.noAudio):
             title = L("没有收到麦克风声音"); detail = L("请检查输入麦克风后重试"); symbol = "mic.slash"
         case .result(.noSpeech):
@@ -75,6 +85,7 @@ private struct DictationHUDCopy {
         case .result(.cancelled):
             title = L("已取消听写"); detail = L("没有输入文字"); symbol = "xmark"
         }
+        showsText = heard
     }
 }
 
@@ -87,11 +98,12 @@ private struct DictationHUDCopy {
     private var shortcut = ""
     private var previewLevels: [Float] = []
     private var previewElapsed: Int?
+    private var previewText = ""
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     func update(engine: DictationEngine, shortcut: Shortcut) {
         self.engine = engine; self.shortcut = shortcut.display
-        previewElapsed = nil; previewLevels = []
+        previewElapsed = nil; previewLevels = []; previewText = ""
         state.update(phase: engine.phase, runID: engine.runID, outcome: engine.outcome, now: now)
         refresh()
     }
@@ -117,8 +129,14 @@ private struct DictationHUDCopy {
         }
         let elapsed = previewElapsed ?? state.elapsed(at: now)
         let levels = engine?.audioLevels ?? previewLevels
+        let heard: String
+        switch state.status {
+        case .recording, .finishing: heard = engine?.text ?? previewText
+        case .result(.inserted), .result(.copied): heard = engine?.lastText ?? previewText
+        default: heard = ""
+        }
         let copy = DictationHUDCopy(status: state.status, shortcut: shortcut, elapsed: elapsed,
-                                    silent: previewElapsed == nil && elapsed >= 3 && engine?.hasRecentAudio == false)
+                                    silent: previewElapsed == nil && elapsed >= 3 && engine?.hasRecentAudio == false, text: heard)
         guard let panel, let surface else { return }
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         let available = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1024, height: 768)
@@ -154,7 +172,11 @@ private struct DictationHUDCopy {
     /// Synthetic status only: no engine, capture, delivery, clipboard or settings mutation.
     func preview(_ name: String, shortcut: String) -> Bool {
         guard engine?.busy != true else { return false }
-        engine = nil; self.shortcut = shortcut; previewElapsed = 12; previewLevels = []
+        engine = nil; self.shortcut = shortcut; previewElapsed = 12; previewLevels = []; previewText = ""
+        // "copied:<words>" and the like preview a run that heard those words.
+        let parts = name.split(separator: ":", maxSplits: 1).map(String.init)
+        let name = parts[0]
+        if parts.count > 1 { previewText = parts[1] }
         let phase: DictationEngine.Phase
         let outcome: DictationOutcome?
         switch name {
@@ -221,6 +243,7 @@ private final class DictationHUDPanel: NSPanel {
         setAccessibilityElement(true); setAccessibilityRole(.group)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    static func detailFont(_ heard: Bool) -> NSFont { .systemFont(ofSize: heard ? 13 : 11, weight: heard ? .medium : .regular) }
     static var orange: NSColor { NSColor(srgbRed: 0.91, green: 0.33, blue: 0.17, alpha: 1) }
 
     private func updateMaterial() {
@@ -250,13 +273,16 @@ private final class DictationHUDPanel: NSPanel {
     }
     func preferredWidth(_ copy: DictationHUDCopy) -> CGFloat {
         let titleWidth = (copy.title as NSString).size(withAttributes: [.font: title.font!]).width
-        let detailWidth = (copy.detail as NSString).size(withAttributes: [.font: detail.font!]).width
+        let detailWidth = (copy.detail as NSString).size(withAttributes: [.font: Self.detailFont(copy.showsText)]).width
         let badgeWidth: CGFloat = copy.badge.isEmpty ? 0 : 52
         return max(368, min(560, ceil(max(titleWidth, detailWidth)) + 76 + badgeWidth))
     }
     func update(_ copy: DictationHUDCopy, recording: Bool, levels: [Float]) {
         updateMaterial()
         title.stringValue = copy.title; detail.stringValue = copy.detail; badge.stringValue = copy.badge
+        detail.lineBreakMode = copy.showsText ? .byTruncatingHead : .byTruncatingTail
+        detail.textColor = copy.showsText ? .labelColor : .secondaryLabelColor
+        detail.font = Self.detailFont(copy.showsText)
         icon.image = NSImage(systemSymbolName: copy.symbol, accessibilityDescription: nil)
         icon.isHidden = recording; meter.isHidden = !recording; meter.levels = levels
         if reducedTransparency == true || highContrast == true {
