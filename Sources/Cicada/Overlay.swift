@@ -567,8 +567,19 @@ final class OverlayView: NSView {
         }
         let bar = barRect
         let radius = 16 * k(fontSize)
-        NSColor(calibratedWhite: 0.05, alpha: 0.92).setFill()
+        // No listened subtitles on the bar (a talk-key press face to face, or the moment before the
+        // first line): a see-through backdrop so it doesn't block what is under it; a shadow under the
+        // text keeps it readable on light pages.
+        let pressOnly = source.isEmpty && translation.isEmpty && alert == nil
+        NSColor(calibratedWhite: 0.05, alpha: pressOnly ? 0.22 : 0.92).setFill()
         NSBezierPath(roundedRect: bar, xRadius: radius, yRadius: radius).fill()
+        let textShadow: NSShadow? = pressOnly ? {
+            let s = NSShadow()
+            s.shadowColor = NSColor.black.withAlphaComponent(0.85)
+            s.shadowBlurRadius = 3
+            s.shadowOffset = NSSize(width: 0, height: -1)
+            return s
+        }() : nil
 
         if hover {
             let outline = NSBezierPath(roundedRect: bar.insetBy(dx: -3, dy: -3), xRadius: radius + 3, yRadius: radius + 3)
@@ -587,7 +598,8 @@ final class OverlayView: NSView {
         center.lineBreakMode = .byWordWrapping
 
         func draw(_ text: String, font: NSFont, color: NSColor, maxLines: Int) {
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: center]
+            var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: center]
+            if let textShadow { attrs[.shadow] = textShadow }
             let maxH = line(font) * CGFloat(maxLines)
             let fitted = fitTail(text, attrs: attrs, width: inner.width, maxHeight: maxH + 1)
             let h = min(maxH, height(of: fitted, attrs: attrs, width: inner.width))

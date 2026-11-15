@@ -415,6 +415,12 @@ final class AppModel: ObservableObject {
             if !self.overlay.isShown { self.overlay.show() }
             if phase == .idle && src.isEmpty {
                 self.overlay.setSpeaking(nil)
+                // Nothing heard and nothing listened to: an empty bar has nothing to linger for.
+                if !self.running && self.settings.displayMode == "notes" {
+                    self.speakBarHide?.cancel()
+                    self.overlay.hide()
+                    return
+                }
             } else {
                 self.overlay.setSpeaking(.init(phase: phase, source: src, translation: dst))
             }
