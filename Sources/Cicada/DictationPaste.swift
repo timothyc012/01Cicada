@@ -3,15 +3,18 @@ import ApplicationServices
 import Carbon.HIToolbox
 
 struct DictationPastePolicy {
-    static func canPaste(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool) -> Bool {
-        blockReason(target: target, current: current, sameField: sameField, trusted: trusted) == nil
+    static func canPaste(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool, fieldUnknown: Bool = false) -> Bool {
+        blockReason(target: target, current: current, sameField: sameField, trusted: trusted, fieldUnknown: fieldUnknown) == nil
     }
 
-    static func blockReason(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool) -> String? {
+    /// `fieldUnknown`: the app wouldn't say which field had focus, at the start or at the end. Electron apps
+    /// (Claude, Slack, VS Code) answer no value by default; with the same app in front all along, the paste
+    /// goes where you are typing, as it would in any dictation app.
+    static func blockReason(target: pid_t?, current: pid_t?, sameField: Bool, trusted: Bool, fieldUnknown: Bool = false) -> String? {
         guard trusted else { return "accessibility_denied" }
         guard let target else { return "no_destination_app" }
         guard current == target else { return "application_changed" }
-        guard sameField else { return "focused_field_changed" }
+        guard sameField || fieldUnknown else { return "focused_field_changed" }
         return nil
     }
 }
@@ -63,10 +66,12 @@ struct DictationPastePolicy {
         var status = -1
         let focused = Self.focusedField(current, status: &status)
         let sameField = field != nil && focused != nil && CFEqual(field!, focused!)
-        let reason = DictationPastePolicy.blockReason(target: pid, current: current, sameField: sameField, trusted: AXIsProcessTrusted())
+        let fieldUnknown = field == nil && focused == nil
+        let reason = DictationPastePolicy.blockReason(target: pid, current: current, sameField: sameField, trusted: AXIsProcessTrusted(),
+                                                      fieldUnknown: fieldUnknown)
         diagnostics.merge(["currentApp": currentApp?.bundleIdentifier ?? "", "currentPID": Int(current ?? -1),
                            "currentFieldCaptured": focused != nil, "currentRole": Self.role(focused),
-                           "currentQueryStatus": status, "sameField": sameField,
+                           "currentQueryStatus": status, "sameField": sameField, "fieldUnknown": fieldUnknown,
                            "reason": reason ?? "ready"]) { _, new in new }
         guard reason == nil else { return false }
         guard let source = CGEventSource(stateID: .combinedSessionState),

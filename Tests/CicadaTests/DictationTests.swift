@@ -51,6 +51,10 @@ import Testing
     }
     @Test func pasteBlockReasonIdentifiesChangedFocusedField() {
         #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: false, trusted: true) == "focused_field_changed")
+        // An app that won't say which field has focus (Electron): same app all along, so it pastes.
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: false, trusted: true, fieldUnknown: true) == nil)
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 12, sameField: false, trusted: true, fieldUnknown: true) == "application_changed")
+        #expect(DictationPastePolicy.blockReason(target: 11, current: 11, sameField: false, trusted: false, fieldUnknown: true) == "accessibility_denied")
     }
     @Test func pasteBlockReasonPreservesTheExistingSafetyPolicy() {
         let processes: [pid_t?] = [nil, 11, 12]
