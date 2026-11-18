@@ -7,6 +7,8 @@ every platform (one with nothing new says No changes); earlier ones shipped only
 
 ## Unreleased
 
+Recognize meetings live with Deepgram, with its own key, for every meeting or only for languages this Mac can't hear such as Russian.
+
 Search and copy completed dictations from Dictation History in Cicada. Empty attempts keep the last successful text available.
 
 Completed work dictation is kept as local text history and can be viewed in AWhisper.

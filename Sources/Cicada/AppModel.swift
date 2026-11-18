@@ -1384,7 +1384,10 @@ final class AppModel: ObservableObject {
         }
         // Takes effect from the next meeting: one already running keeps how it listens, except that
         // its audio never goes on to a service other than the one hearing it (`aiServiceChanged`).
-        Recognition.serverPreferred = c.transcribes && settings.aiCustomRecognize
+        // Apple silicon only: an Intel Mac has no engine of its own to fall back to when Deepgram fails.
+        Recognition.deepgramHears = settings.deepgramOn && !Recognition.cloudOnly
+        Recognition.serverPreferred = Recognition.deepgramHears ? settings.deepgramMode == "always"
+            : c.transcribes && settings.aiCustomRecognize
         translator.googleOff = c.provider.id == .custom && settings.aiCustomOnly
         ling.reconfigure()
         listen.aiServiceChanged()
@@ -2647,6 +2650,11 @@ final class AppModel: ObservableObject {
         case "aiCustomRecognize": settings.aiCustomRecognize = arg == "on"; applyAIService()
         case "aiCustomRecognizeMissing": settings.aiCustomRecognizeMissing = arg == "on"; applyAIService()
         case "aiCustomOnly": settings.aiCustomOnly = arg == "on"; applyAIService()
+        // deepgram:<off|missing|always>: Settings › AI 服务 › Deepgram (needs its key saved there).
+        case "deepgram":
+            settings.deepgramMode = ["off", "missing", "always"].contains(arg) ? arg : "off"
+            applyAIService()
+            debugLog("deepgram: \(settings.deepgramMode), hears=\(Recognition.deepgramHears)")
         case "subtitles": setSubtitles(arg)
         case "meetingSubtitles": setSubtitles(arg, meetingOnly: true)
         case "notesLang": setNotesLanguage(arg)

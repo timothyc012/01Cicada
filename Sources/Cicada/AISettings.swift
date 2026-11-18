@@ -16,6 +16,12 @@ struct AISettingsView: View {
     @State private var editingNotesKey = false
     /// A pasted key that belongs elsewhere: what it is, and (for another service's key) where it fits.
     @State private var keyHint: (text: String, service: AIProvider.Kind?, key: String)?
+    @State private var deepgramDraft = ""
+    @State private var editingDeepgramKey = false
+    /// Bumped when the Deepgram key file changes, so the card reads it again.
+    @State private var deepgramKeyVersion = 0
+    /// What Deepgram said about the saved key: nil not asked yet, then `Deepgram.check`'s answer.
+    @State private var deepgramKeyOK: Bool??
 
     private var provider: AIProvider { settings.provider }
     private var name: String { provider.name }
@@ -33,6 +39,7 @@ struct AISettingsView: View {
             Text("现在能用的").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.secondary)
                 .padding(.top, 4)
             SettingsCard { usage }
+            if !Recognition.cloudOnly { deepgramCard }
             Button { withAnimation(.easeOut(duration: 0.15)) { model.aiModelsOpen.toggle() } } label: {
                 HStack(spacing: 4) {
                     Text("自己选模型")
@@ -67,6 +74,7 @@ struct AISettingsView: View {
                 hearSection
             }
             SettingsCard { onlyRow }
+            if !Recognition.cloudOnly { deepgramCard }
             HStack(spacing: 6) {
                 Image(systemName: "lock").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 Text(lockLine).font(.system(size: 11)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
@@ -411,7 +419,9 @@ struct AISettingsView: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text("语音识别").font(.system(size: 13)).foregroundStyle(Palette.ink)
-                Text(own ? L("会议的声音会发到 \(host)；连不上时用本机")
+                // Deepgram on takes recognition over (AppModel.applyAIService): this row must not say otherwise.
+                Text(Recognition.deepgramHears ? L("Deepgram 开着，语音识别交给它（见下面）")
+                     : own ? L("会议的声音会发到 \(host)；连不上时用本机")
                      : missing ? L("本机听不懂的语言（如俄语）发到 \(host)，其余留在本机")
                      : L("更快，不花钱，声音不出这台 Mac"))
                     .font(.system(size: 11)).foregroundStyle(Palette.tertiary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
@@ -760,9 +770,93 @@ struct AISettingsView: View {
             } else {
                 usageRow(L("语音识别"), tag: L("只有 Ling"), style: .ling, note: L("换用 Ling 才有"), divider: false)
             }
+        } else if settings.deepgramOn {
+            usageRow(L("语音识别"), tag: "Deepgram", style: .ok,
+                     note: settings.deepgramMode == "always" ? L("会议的声音发给 Deepgram") : L("本机听不懂的语言发给 Deepgram"),
+                     divider: false)
         } else {
             usageRow(L("语音识别"), tag: L("本机"), style: .off, note: L("更快，不花钱"), divider: false)
         }
+    }
+
+    // MARK: Deepgram
+
+    /// Deepgram hears the meeting as it is spoken, with a key of its own, whichever service translates.
+    @ViewBuilder private var deepgramCard: some View {
+        let mode = settings.deepgramMode
+        let key = deepgramKeyVersion >= 0 ? AIKey.read(Deepgram.keyName) : nil
+        SettingsCard {
+            HStack(spacing: 10) {
+                // Green only once Deepgram has taken the key.
+                Circle().fill(mode == "off" || key == nil ? Color(white: 0.75)
+                              : deepgramKeyOK == .some(true) ? Palette.ok
+                              : deepgramKeyOK == .some(false) ? Palette.error : Color(white: 0.75))
+                    .frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Deepgram 语音识别").font(.system(size: 13)).foregroundStyle(Palette.ink)
+                    Text(mode == "always" ? L("会议的声音实时发到 Deepgram；连不上时用本机")
+                         : mode == "missing" ? L("本机听不懂的语言（如俄语）实时发到 Deepgram，其余留在本机")
+                         : L("实时识别，按时长计费，用它自己的 key"))
+                        .font(.system(size: 11)).foregroundStyle(Palette.tertiary).lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Segments(options: [("off", L("本机")), ("missing", L("本机听不懂时")), ("always", L("一直用"))], value: mode) {
+                    settings.deepgramMode = $0
+                    model.applyAIService()
+                }
+            }
+            .padding(.horizontal, 16).frame(minHeight: 52)
+            if mode != "off" {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        fieldLabel("key")
+                        if let key, !editingDeepgramKey {
+                            maskedKey(key)
+                            SoftButton(L("更换")) { deepgramDraft = ""; editingDeepgramKey = true }
+                            SoftButton(L("移除")) {
+                                AIKey.remove(Deepgram.keyName)
+                                deepgramKeyVersion += 1
+                                model.applyAIService()
+                            }
+                        } else {
+                            SecureField(L("粘贴 Deepgram 的 key"), text: $deepgramDraft)
+                                .textFieldStyle(.plain).font(.system(size: 13, design: .monospaced))
+                                .padding(.horizontal, 12).frame(height: 30)
+                                .background(RoundedRectangle(cornerRadius: 9).fill(Color.white))
+                                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
+                                .onSubmit(saveDeepgramKey)
+                            SoftButton(L("保存"), dark: true) { saveDeepgramKey() }
+                        }
+                    }
+                    if key == nil {
+                        Text("填上 key 才会用 Deepgram 识别。").font(.system(size: 12)).foregroundStyle(Palette.warn)
+                    } else if deepgramKeyOK == .some(false) {
+                        Text("Deepgram 不认这个 key，请重新粘贴。").font(.system(size: 12)).foregroundStyle(Palette.error)
+                    } else if deepgramKeyOK == .some(nil) {
+                        Text("没能检查这个 key，开会时会再试。").font(.system(size: 12)).foregroundStyle(Palette.warn)
+                    }
+                    Text("下一场会议起生效。key 和声音只发给 \(Deepgram.host)。")
+                        .font(.system(size: 11)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.leading, 34).padding(.trailing, 16).padding(.bottom, 14)
+            }
+        }
+        // Asked again whenever the key changes or the card is opened with one.
+        .task(id: deepgramKeyVersion) {
+            deepgramKeyOK = nil
+            guard let key = AIKey.read(Deepgram.keyName) else { return }
+            deepgramKeyOK = .some(await Deepgram.check(key: key))
+        }
+    }
+
+    private func saveDeepgramKey() {
+        let k = deepgramDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !k.isEmpty, AIKey.save(k, Deepgram.keyName) else { return }
+        deepgramDraft = ""
+        editingDeepgramKey = false
+        deepgramKeyVersion += 1
+        model.applyAIService()
     }
 
     private func voiceNote(down: Bool) -> String {
@@ -818,6 +912,12 @@ struct AISettingsView: View {
     }
 
     private var footnote: String {
+        // Deepgram hears the meeting: the lines below would say recognition stays on this Mac.
+        if !Recognition.cloudOnly, settings.deepgramOn {
+            return settings.deepgramMode == "always"
+                ? L("会议的声音实时发给 Deepgram 识别（按时长计费），连不上时改用本机；翻译照常用 \(name)。")
+                : L("本机听不懂的语言，声音实时发给 Deepgram 识别（按时长计费）；其余语音识别留在本机。")
+        }
         if Recognition.cloudOnly, provider.id != .custom {
             return L("一小时会议约 ¥0.15–1（目前优惠价）。说话的声音分段发给 Ling 识别和翻译；会议录音和文字记录只存在这台 Mac 上。")
         }

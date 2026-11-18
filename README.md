@@ -147,6 +147,8 @@ The table below shows the setup on Apple silicon Macs. When using a self-hosted 
 
 **Can't sign up for Ling?** At the top right of **Settings › AI Service** (or by clicking **Can't use Ling?** during onboarding), you can switch to OpenRouter, ZenMux, OpenAI, or any OpenAI-compatible service (including local or LAN services like Ollama, vLLM, SGLang, Qwen3-ASR, and Whisper).
 
+**Deepgram live recognition**: In **Settings › AI Service › Deepgram speech recognition**, paste a Deepgram key and pick **When this Mac can't** (for example Russian) or **Always**. The meeting audio then goes to Deepgram (nova-3, EU) as it is spoken, with live drafts, whichever service translates; if Deepgram can't be reached, this Mac recognizes the rest of the meeting.
+
 After switching, live notes and full-sentence translation still work, and OpenRouter and ZenMux can also use natural Gemini voices for interpreting; one-step voice translation and voice cloning are supported only by Ling. With a self-hosted service, notes and speaker naming can use a stronger model of their own, or connect to another service (enter its own address and key); search for models in the list, or type one in directly if it isn't found. When Windows, Linux, or Android switches to another service, listening to the other side also goes through the new service, so subtitles run 1–2 seconds behind Ling. If a connection fails, Settings tells you directly whether it's a key, model, or proxy issue (see the [setup page](https://cicada.indaloop.app/en/start/#proxy) for proxy details).
 
 ## Requirements & Installation

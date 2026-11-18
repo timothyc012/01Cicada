@@ -31,6 +31,11 @@ enum Recognition {
     /// stay ready, and listening falls back to them when the service stops answering.
     nonisolated(unsafe) static var serverPreferred = false
 
+    /// Deepgram is picked (Settings › AI 服务 › Deepgram) and has a key, set by the app: it is the
+    /// user's own recognition server then, whichever AI service translates. `serverPreferred` says
+    /// whether it hears every meeting or only the languages this Mac can't.
+    nonisolated(unsafe) static var deepgramHears = false
+
     /// Languages this Mac's speech models don't hear (SpeechTranscriber on macOS 26 has no Russian):
     /// picked under 听到, they are heard by the user's own speech service when one is set up.
     static let serverOnlyLocales: Set<String> = ["ru-RU"]

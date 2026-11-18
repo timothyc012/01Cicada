@@ -97,8 +97,9 @@ final class ListenEngine {
         /// The model being waited for: once it is on the Mac, listening goes back to it.
         let awaiting: Lang?
         /// Who was hearing the meeting when it went to a service, and whether it was the user's own
-        /// recognition server (rather than 先用○○听): a change in settings must not move the audio elsewhere.
-        let via: (provider: AIProvider.Kind?, server: Bool)
+        /// recognition server (rather than 先用○○听), and whether that server is Deepgram: a change in
+        /// settings must not move the audio elsewhere.
+        let via: (provider: AIProvider.Kind?, server: Bool, deepgram: Bool)
         /// The language the service says is spoken.
         var lang: Lang?
         var failures = 0
@@ -111,7 +112,7 @@ final class ListenEngine {
     /// The meeting is recognized by the user's own service (`Recognition.serverPreferred`), or the
     /// language picked under 听到 has no model on this Mac (`Recognition.needsServer`).
     var serverHears: Bool {
-        guard !serverFellBack, translator?.ling.transcribes == true else { return false }
+        guard !serverFellBack, translator?.ling.transcribes == true || Recognition.deepgramHears else { return false }
         if case .fixed(let lang) = sourceMode {
             return Self.serverHears(preferred: Recognition.serverPreferred, fixedLocale: lang.locale)
         }
@@ -126,9 +127,14 @@ final class ListenEngine {
     /// The service that can hear audio (Ling's Ming, or a custom service's speech model); nil when
     /// there is none.
     var cloudService: String? {
+        if viaDeepgram { return "Deepgram" }
         guard let ling = translator?.ling, ling.hearsAudio || ling.transcribes else { return nil }
         return ling.config().provider.name
     }
+    /// Deepgram hears this meeting, or would once listening goes to the server: the one test for
+    /// which stream `startCloud` opens and whose name is shown. Set apart from the custom service's
+    /// speech model, which shares the AI service's key; Deepgram has its own.
+    private var viaDeepgram: Bool { cloud.map { $0.via.deepgram } ?? (Recognition.deepgramHears && serverHears) }
     /// 先用○○听 is offered: a model listening needs has been downloading a while, or couldn't be had.
     var offersCloud: Bool {
         guard isRunning, !cloudListening, cloudService != nil else { return false }
@@ -389,6 +395,7 @@ final class ListenEngine {
         cloud = nil
         cloudBack = nil
         serverFellBack = false
+        fallbackStatus = nil
         startedAt = Date()
         updateHold()
         debugLog("listen start mode=\(sourceMode) target=\(resolvedTarget)")
@@ -788,7 +795,8 @@ final class ListenEngine {
                 }
             }
             debugLog("transcriber started recognizer=\(Recognition.name) locale=\(lang.locale) format=\(stream.format)")
-            setStatus(L("正在听"))
+            setStatus(fallbackStatus ?? L("正在听"))
+            fallbackStatus = nil
         } catch {
             debugLog("transcriber start failed locale=\(lang.locale): \(error)")
             recognitionFailed(error, generation: gen)
@@ -1196,7 +1204,9 @@ final class ListenEngine {
             recognizer = nil
             Task { await old.cancel() }
         }
-        cloud = CloudSession(replaced: replaced, awaiting: awaiting, via: (translator.ling.provider.id, serverHears))
+        let deepgramKey = viaDeepgram ? AIKey.read(Deepgram.keyName) : nil
+        cloud = CloudSession(replaced: replaced, awaiting: awaiting,
+                             via: (translator.ling.provider.id, serverHears, deepgramKey != nil))
         unconfirmed = []
         segments.removeAll()
         volatileText = ""
@@ -1208,7 +1218,52 @@ final class ListenEngine {
         lastVolatileSent = ""
         detection.clearMismatch()
         modelProblem = nil
-        let stream = CloudStream(format: format) { [weak self] wav, seconds in
+        let stream: RecognitionStream
+        if let deepgramKey {
+            // The language once it is known (picked, or confirmed before); nova-3 hears several otherwise.
+            stream = DeepgramStream(key: deepgramKey, language: cloudHint, format: format)
+        } else {
+            stream = cloudStream(format: format, translator: translator, gen: gen)
+        }
+        router.attach(stream, replaySeconds: replay)
+        recognizer = stream
+        resultsTask = Task { [weak self] in
+            do {
+                for try await piece in stream.results { self?.handle(piece, generation: gen) }
+            } catch {
+                debugLog("cloud: stream ended: \(error)")
+                guard let self, gen == self.generation, self.cloud?.via.deepgram == true,
+                      !(error is CancellationError) else { return }
+                self.deepgramFailed()
+            }
+        }
+        setStatus(L("\(cloudService ?? "AI") 在听"))
+    }
+
+    /// Deepgram rejected the key or the connection dropped: this Mac recognizes the rest of the
+    /// meeting, except a language it has no model for (Russian), which only says why it's quiet.
+    private func deepgramFailed() {
+        let lang = cloud?.replaced.lang ?? activeLang
+        debugLog("cloud: Deepgram failed, back to this Mac for this meeting")
+        serverFellBack = true
+        if cloud?.replaced.lang == nil { cloud?.replaced = (activeLang, false) }
+        // Never on an Intel Mac (`Recognition.deepgramHears`), so there is always this Mac to go back to.
+        if let lang, Recognition.needsServer(lang.locale) {
+            stopCloud()
+            setStatus(L("Deepgram 连不上，本机听不懂\(lang.name)"))
+        } else {
+            // Said once this Mac's recognizer is up, or its 正在听 would cover it at once.
+            let service = "Deepgram"
+            fallbackStatus = L("\(service) 连不上 · 字幕改用本机识别")
+            stopCloud()
+        }
+    }
+    /// What the status says when this Mac's recognizer starts, instead of 正在听.
+    private var fallbackStatus: String?
+
+    /// The meeting heard a stretch at a time by the AI service (Ming, or a custom speech model).
+    private func cloudStream(format: AVAudioFormat?, translator: TranslationService, gen: Int) -> CloudStream {
+        CloudStream(format: format) { [weak self] wav, seconds in
             guard let self, gen == self.generation else { return nil }
             do {
                 let heard: CloudHeard?
@@ -1243,16 +1298,6 @@ final class ListenEngine {
                 return nil
             }
         }
-        router.attach(stream, replaySeconds: replay)
-        recognizer = stream
-        resultsTask = Task { [weak self] in
-            do {
-                for try await piece in stream.results { self?.handle(piece, generation: gen) }
-            } catch {
-                debugLog("cloud: stream ended: \(error)")
-            }
-        }
-        setStatus(L("\(cloudService ?? "AI") 在听"))
     }
 
     /// 换回等待 (or the service failing): back to what listened before, the download carrying on.
@@ -1274,6 +1319,14 @@ final class ListenEngine {
     /// 本机, takes the meeting back to this Mac rather than sending its audio to a service nobody chose.
     func aiServiceChanged() {
         guard let via = cloud?.via else { return }
+        // Deepgram doesn't depend on the AI service: only turning it off (or 本机听不懂时 for a
+        // language this Mac knows) takes the meeting back.
+        if via.deepgram {
+            guard !(Recognition.deepgramHears && serverHears) else { return }
+            debugLog("cloud: Deepgram turned off, back to this Mac")
+            stopCloud()
+            return
+        }
         let provider = translator?.ling.provider.id
         guard provider != via.provider || (via.server && !Recognition.serverPreferred) else { return }
         debugLog("cloud: the AI service changed (\(via.provider?.rawValue ?? "?") → \(provider?.rawValue ?? "?")), back to this Mac")

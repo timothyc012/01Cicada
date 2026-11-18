@@ -177,6 +177,14 @@ final class AppSettings: ObservableObject {
     @Published var aiCustomOnly: Bool {
         didSet { save() }
     }
+    /// Deepgram (Settings › AI 服务): "off", "missing" (only a language this Mac has no model for,
+    /// picked under 听到) or "always" (every meeting). Its key is the `deepgram` key file; with none
+    /// it stays off. Whichever AI service translates.
+    @Published var deepgramMode: String {
+        didSet { save() }
+    }
+    /// Deepgram hears meetings now: picked and a key saved.
+    var deepgramOn: Bool { deepgramMode != "off" && AIKey.read(Deepgram.keyName) != nil }
 
     var provider: AIProvider { AIProvider.named(aiProvider) }
 
@@ -341,6 +349,7 @@ final class AppSettings: ObservableObject {
         aiCustomRecognize = defaults.bool(forKey: "aiCustomRecognize")
         aiCustomRecognizeMissing = defaults.bool(forKey: "aiCustomRecognizeMissing")
         aiCustomOnly = defaults.bool(forKey: "aiCustomOnly")
+        deepgramMode = defaults.string(forKey: "deepgramMode") ?? "off"
         aiCustomNotesOwn = defaults.bool(forKey: "aiCustomNotesOwn")
         aiCustomNotesBase = defaults.string(forKey: "aiCustomNotesBase") ?? ""
         displayMode = defaults.string(forKey: "displayMode") ?? "notes"
@@ -411,6 +420,7 @@ final class AppSettings: ObservableObject {
         defaults.set(aiCustomRecognize, forKey: "aiCustomRecognize")
         defaults.set(aiCustomRecognizeMissing, forKey: "aiCustomRecognizeMissing")
         defaults.set(aiCustomOnly, forKey: "aiCustomOnly")
+        defaults.set(deepgramMode, forKey: "deepgramMode")
         defaults.set(aiCustomNotesOwn, forKey: "aiCustomNotesOwn")
         defaults.set(aiCustomNotesBase, forKey: "aiCustomNotesBase")
         defaults.set(displayMode, forKey: "displayMode")
