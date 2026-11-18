@@ -35,8 +35,10 @@ if [[ "${RELEASE:-}" != 1 ]]; then
   STAMP="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo local) @ $(git rev-parse --short HEAD 2>/dev/null || echo none)"
   [[ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]] && STAMP+="+"
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.wquguru.cicada.dev" \
-    -c "Set :CFBundleName 01Cicada" -c "Set :CFBundleDisplayName 01Cicada" \
+    -c "Set :CFBundleName 01Cicada" \
     -c "Add :LiveSubsDev string $STAMP" "$PLIST"
+  # CFBundleDisplayName in Info.plist stays "Cicada", the bundle's file name: Finder, Spotlight and the
+  # Dock only use the localized "01Cicada" below when that plain value matches the file name.
   # Only the two name lines change: the usage descriptions in the same files stay.
   sed -i '' -E 's/^(CFBundle(Display)?Name = ")([^"]*)";/\101Cicada";/' \
     "$APP"/Contents/Resources/*.lproj/InfoPlist.strings

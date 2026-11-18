@@ -85,7 +85,7 @@ struct ListenPill: View {
             HStack(spacing: 9) {
                 // In colour while idle too: the white pill against the ink one already tells off from on.
                 BrandMark(size: 22)
-                Text(L("知了")).font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.ink)
+                Text(appDisplayName).font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.ink)
                 Rectangle().fill(Palette.line).frame(width: 1, height: 14)
                 Text(model.autoEnded ? L("会议已自动结束") : L("开始听"))
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
